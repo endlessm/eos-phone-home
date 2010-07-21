@@ -7,6 +7,7 @@ import time
 import os
 import urlparse
 import operator
+import optparse
 import cPickle as pickle
 
 class Counter:
@@ -171,23 +172,40 @@ class State:
             print 'machines:', counter.count()
             print 'hist:', counter.counters
 
-def main():
-    if len(sys.argv) < 2 or (sys.argv[1] != '-t' and len(sys.argv) != 3):
-        print >> sys.stderr, 'Usage: "%s <path to apache log> <data file>" or "%s -t"' % (
-                sys.argv[0], sys.argv[0])
-        sys.exit(1)
+def parse_args():
+    '''Parse command line args.
 
-    if sys.argv[1] == '-t':
+    Return (options, args) tuple.
+    '''
+
+    parser = optparse.OptionParser()
+    parser.add_option('-t', '--test', dest='test', action='store_true',
+            help='Run simulator for testing the algorithm')
+    parser.add_option('-d', '--data-file', dest='datafile', metavar='PATH',
+            help='Path to data file')
+    parser.add_option('-l', '--log', dest='logfile', metavar='PATH',
+            help='Update data with Apache log file.')
+
+    (opts, args) = parser.parse_args()
+
+    if not opts.test:
+        if not opts.datafile:
+            parser.error('ERROR: You need to specify a data file with --data-file.  See --help')
+
+    return (opts, args)
+
+def main():
+    (opts, args) = parse_args()
+
+    if opts.test:
         Simulator().test()
         sys.exit(0)
 
-    (apachelog, datafile) = sys.argv[1:]
-
     state = State()
-    if os.path.exists(datafile):
-        state.load(datafile)
-    state.update_from_log(apachelog)
-    state.save(datafile)
+    if os.path.exists(opts.datafile):
+        state.load(opts.datafile)
+    state.update_from_log(opts.logfile)
+    state.save(opts.datafile)
     state.dump()
 
 if __name__ == '__main__':
