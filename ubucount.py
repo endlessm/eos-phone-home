@@ -5,6 +5,7 @@ import re
 import sys
 import time
 import urlparse
+import operator
 
 class Counter:
     def __init__(self):
@@ -26,7 +27,7 @@ class Counter:
                 print "%d: %d" % (i, self.counters[i])
 
     def count(self):
-        return sum(self.counters[i] for i in range(len(self.counters)))
+        return reduce(operator.__add__, self.counters)
 
 class TestClient:
     def __init__(self):
