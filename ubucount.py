@@ -6,6 +6,7 @@ import sys
 import time
 import urlparse
 import operator
+import cPickle as pickle
 
 class Counter:
     def __init__(self):
@@ -101,34 +102,56 @@ def test():
     sim.counter.dump()
     assert sim.counter.count() == len(sim.clients)
 
-def parse_log(path, dcds, last_time):
-    '''Parse Apache log and update the dcd->Counter dict
-    
-    This will only include items which are newer than the given timestamp.
-    '''
-    census_re = re.compile('\d+\.\d+\.\d+\.\d+[\s-]+\[(.+?) [-+]\d{4}\] "GET /census\?([^\s"]+)')
+class State:
+    '''State of the entire system'''
 
-    for line in open(path):
-        m = census_re.match(line)
-        if not m:
-            continue
-        timestamp = time.mktime(time.strptime(m.group(1), '%d/%b/%Y:%H:%M:%S'))
-        if timestamp <= last_time:
-            print 'ignoring previously seen line', line
-            continue
+    def __init__(self):
+        '''Initialize an empty state'''
 
-        args = urlparse.parse_qs(m.group(2))
-        try:
-            dcd = args['dcd'][0]
-            assert len(dcd) > 0
-            count = int(args['count'][0])
-        except (TypeError, ValueError, KeyError):
-            print 'ERROR! Invalid census query:', m.group(2)
-            continue
-            
-        #print 'timestamp: %f (%s), DCD: %s, count: %i' % (timestamp, m.group(1), dcd, count)
+        self.channel_map = {}
+        self.last_time = 0
 
-        dcds.setdefault(dcd, Counter()).add(count)
+    def load(self, path):
+        '''Load state from a file'''
+
+        f = open(path)
+        (self.channel_map, self.last_time) = pickle.load(f)
+        f.close()
+
+    def update_from_log(self, path):
+        '''Update status from Apache log.
+        
+        This will only include items which are newer than the last timestamp.
+        '''
+        census_re = re.compile('\d+\.\d+\.\d+\.\d+[\s-]+\[(.+?) [-+]\d{4}\] "GET /census\?([^\s"]+)')
+
+        for line in open(path):
+            m = census_re.match(line)
+            if not m:
+                continue
+            timestamp = time.mktime(time.strptime(m.group(1), '%d/%b/%Y:%H:%M:%S'))
+            if timestamp <= self.last_time:
+                print 'ignoring previously seen line', line
+                continue
+
+            args = urlparse.parse_qs(m.group(2))
+            try:
+                dcd = args['dcd'][0]
+                assert len(dcd) > 0
+                count = int(args['count'][0])
+            except (TypeError, ValueError, KeyError):
+                print 'ERROR! Invalid census query:', m.group(2)
+                continue
+                
+            #print 'timestamp: %f (%s), DCD: %s, count: %i' % (timestamp, m.group(1), dcd, count)
+
+            self.channel_map.setdefault(dcd, Counter()).add(count)
+
+    def dump(self):
+        for channel, counter in self.channel_map.iteritems():
+            print '---- %s ---' % channel
+            print 'machines:', counter.count()
+            print 'hist:', counter.counters
 
 def main():
     if len(sys.argv) != 2:
@@ -140,11 +163,9 @@ def main():
         test()
         sys.exit(0)
 
-    dcds = {}
-    parse_log(sys.argv[1], dcds, 0)
-    for d, c in dcds.iteritems():
-        print '---- %s: %i machines ----' % (d, c.count())
-        c.dump()
+    state = State()
+    state.update_from_log(sys.argv[1])
+    state.dump()
 
 if __name__ == '__main__':
     main()
