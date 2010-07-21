@@ -130,6 +130,15 @@ def parse_log(path, dcds, last_time):
         dcds.setdefault(dcd, Counter()).add(count)
 
 def main():
+    if len(sys.argv) != 2:
+        print >> sys.stderr, 'Usage: "%s <path to apache log>" or "%s -t"' % (
+                sys.argv[0], sys.argv[0])
+        sys.exit(1)
+
+    if sys.argv[1] == '-t':
+        test()
+        sys.exit(0)
+
     dcds = {}
     parse_log(sys.argv[1], dcds, 0)
     for d, c in dcds.iteritems():
