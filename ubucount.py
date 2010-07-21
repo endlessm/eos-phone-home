@@ -4,6 +4,7 @@ import random
 import re
 import sys
 import time
+import urlparse
 
 class Counter:
     def __init__(self):
@@ -111,12 +112,29 @@ def parse_log(path, dcds, last_time):
         if not m:
             continue
         timestamp = time.mktime(time.strptime(m.group(1), '%d/%b/%Y:%H:%M:%S'))
-        print 'timestamp: %f (%s), args: %s' % (timestamp, m.group(1), m.group(2))
+        if timestamp <= last_time:
+            print 'ignoring previously seen line', line
+            continue
+
+        args = urlparse.parse_qs(m.group(2))
+        try:
+            dcd = args['dcd'][0]
+            assert len(dcd) > 0
+            count = int(args['count'][0])
+        except (TypeError, ValueError, KeyError):
+            print 'ERROR! Invalid census query:', m.group(2)
+            continue
+            
+        #print 'timestamp: %f (%s), DCD: %s, count: %i' % (timestamp, m.group(1), dcd, count)
+
+        dcds.setdefault(dcd, Counter()).add(count)
 
 def main():
     dcds = {}
-
     parse_log(sys.argv[1], dcds, 0)
+    for d, c in dcds.iteritems():
+        print '---- %s: %i machines ----' % (d, c.count())
+        c.dump()
 
 if __name__ == '__main__':
     main()
