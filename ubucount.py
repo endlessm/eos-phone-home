@@ -1,0 +1,122 @@
+#!/usr/bin/python
+
+import random
+import re
+import sys
+import time
+
+class Counter:
+    def __init__(self):
+        self.counters = []
+
+    def add(self, generation):
+        need_counters = generation + 1 - len(self.counters)
+        self.counters.extend(0 for n in range(need_counters))
+
+        if generation > 0 and self.counters[generation-1] > 0:
+            self.counters[generation-1] -= 1
+        self.counters[generation] += 1
+
+    def dump(self):
+        print "Generations: %d" % len(self.counters)
+        print "Histogram:"
+        for i in range(len(self.counters)):
+            if self.counters[i] > 0:
+                print "%d: %d" % (i, self.counters[i])
+
+    def count(self):
+        return sum(self.counters[i] for i in range(len(self.counters)))
+
+class TestClient:
+    def __init__(self):
+        self.generation = 0
+
+    def test(self): return True
+
+    def increment(self):
+        gen = self.generation
+        self.generation += 1
+        return gen
+
+class RandomFailureClient(TestClient):
+    def __init__(self, error_rate):
+        """0 < error_rate <= 100"""
+
+        TestClient.__init__(self)
+        self.error_rate = error_rate
+
+    def test(self):
+        if random.randint(0,100) > self.error_rate:
+            return True
+        return False
+
+class Simulator:
+    def __init__(self):
+        self.clients = []
+        self.counter = Counter()
+
+    def iterate(self, n=1):
+        for i in range(n):
+            for client in self.clients:
+                if client.test():
+                    self.counter.add(client.increment())
+def test():
+    sim = Simulator()
+
+    # add 50 clients which randomly fail from 0-50% of the time
+    sim.clients.extend([RandomFailureClient(random.randint(0,50)) for i in range(50)])
+
+    # run for 100 iterations
+    sim.iterate(100)
+
+    # add 20 clients which always succeed
+    sim.clients.extend(TestClient() for i in range(20))
+
+    # run for 25 iterations
+    sim.iterate(25)
+
+    # add 30 clients which were incrementing but not phoning home until now
+    stale_clients = [TestClient() for i in range(30)]
+    for iteration in range(30):
+        for client in stale_clients:
+            client.increment()
+    sim.clients.extend(stale_clients)
+
+    # run for 25 iterations
+    sim.iterate(25)
+
+    # add 30 clients which were randomly incrementing but not phoning home until now
+    stale_clients = [RandomFailureClient(random.randint(0,50)) for i in range(30)]
+    for iteration in range(30):
+        for client in stale_clients:
+            if client.test():
+                client.increment()
+    sim.clients.extend(stale_clients)
+
+    # run for 25 iterations
+    sim.iterate(25)
+
+    sim.counter.dump()
+    assert sim.counter.count() == len(sim.clients)
+
+def parse_log(path, dcds, last_time):
+    '''Parse Apache log and update the dcd->Counter dict
+    
+    This will only include items which are newer than the given timestamp.
+    '''
+    census_re = re.compile('\d+\.\d+\.\d+\.\d+[\s-]+\[(.+?) [-+]\d{4}\] "GET /census\?([^\s"]+)')
+
+    for line in open(path):
+        m = census_re.match(line)
+        if not m:
+            continue
+        timestamp = time.mktime(time.strptime(m.group(1), '%d/%b/%Y:%H:%M:%S'))
+        print 'timestamp: %f (%s), args: %s' % (timestamp, m.group(1), m.group(2))
+
+def main():
+    dcds = {}
+
+    parse_log(sys.argv[1], dcds, 0)
+
+if __name__ == '__main__':
+    main()
