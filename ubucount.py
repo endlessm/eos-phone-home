@@ -4,6 +4,7 @@ import random
 import re
 import sys
 import time
+import os
 import urlparse
 import operator
 import cPickle as pickle
@@ -118,6 +119,22 @@ class State:
         (self.channel_map, self.last_time) = pickle.load(f)
         f.close()
 
+    def save(self, path):
+        '''Save state to file.
+
+        This happens atomically.
+        '''
+        f = open(path + '.new', 'w')
+        try:
+            pickle.dump((self.channel_map, self.last_time), f)
+            f.flush()
+            os.fsync(f.fileno())
+            f.close()
+            os.rename(path + '.new', path)
+        except:
+            os.unlink(path + '.new')
+            raise
+
     def update_from_log(self, path):
         '''Update status from Apache log.
         
@@ -147,6 +164,8 @@ class State:
 
             self.channel_map.setdefault(dcd, Counter()).add(count)
 
+        self.last_time = timestamp
+
     def dump(self):
         for channel, counter in self.channel_map.iteritems():
             print '---- %s ---' % channel
@@ -154,8 +173,8 @@ class State:
             print 'hist:', counter.counters
 
 def main():
-    if len(sys.argv) != 2:
-        print >> sys.stderr, 'Usage: "%s <path to apache log>" or "%s -t"' % (
+    if len(sys.argv) < 2 or (sys.argv[1] != '-t' and len(sys.argv) != 3):
+        print >> sys.stderr, 'Usage: "%s <path to apache log> <data file>" or "%s -t"' % (
                 sys.argv[0], sys.argv[0])
         sys.exit(1)
 
@@ -163,8 +182,13 @@ def main():
         test()
         sys.exit(0)
 
+    (apachelog, datafile) = sys.argv[1:]
+
     state = State()
-    state.update_from_log(sys.argv[1])
+    if os.path.exists(datafile):
+        state.load(datafile)
+    state.update_from_log(apachelog)
+    state.save(datafile)
     state.dump()
 
 if __name__ == '__main__':
