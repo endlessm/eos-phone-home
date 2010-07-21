@@ -13,7 +13,7 @@ class Counter:
 
     def add(self, generation):
         need_counters = generation + 1 - len(self.counters)
-        self.counters.extend(0 for n in range(need_counters))
+        self.counters += [0] * need_counters
 
         if generation > 0 and self.counters[generation-1] > 0:
             self.counters[generation-1] -= 1
