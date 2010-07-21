@@ -148,7 +148,7 @@ class State:
                 continue
             timestamp = time.mktime(time.strptime(m.group(1), '%d/%b/%Y:%H:%M:%S'))
             if timestamp <= self.last_time:
-                print 'ignoring previously seen line', line
+                #print 'ignoring previously seen line', line
                 continue
 
             args = urlparse.parse_qs(m.group(2))
