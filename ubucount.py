@@ -31,29 +31,6 @@ class Counter:
     def count(self):
         return reduce(operator.__add__, self.counters)
 
-class TestClient:
-    def __init__(self):
-        self.generation = 0
-
-    def test(self): return True
-
-    def increment(self):
-        gen = self.generation
-        self.generation += 1
-        return gen
-
-class RandomFailureClient(TestClient):
-    def __init__(self, error_rate):
-        """0 < error_rate <= 100"""
-
-        TestClient.__init__(self)
-        self.error_rate = error_rate
-
-    def test(self):
-        if random.randint(0,100) > self.error_rate:
-            return True
-        return False
-
 class Simulator:
     def __init__(self):
         self.clients = []
@@ -64,44 +41,66 @@ class Simulator:
             for client in self.clients:
                 if client.test():
                     self.counter.add(client.increment())
-def test():
-    sim = Simulator()
 
-    # add 50 clients which randomly fail from 0-50% of the time
-    sim.clients.extend([RandomFailureClient(random.randint(0,50)) for i in range(50)])
+    def test(self):
+        class TestClient:
+            def __init__(self):
+                self.generation = 0
 
-    # run for 100 iterations
-    sim.iterate(100)
+            def test(self): return True
 
-    # add 20 clients which always succeed
-    sim.clients.extend(TestClient() for i in range(20))
+            def increment(self):
+                gen = self.generation
+                self.generation += 1
+                return gen
 
-    # run for 25 iterations
-    sim.iterate(25)
+        class RandomFailureClient(TestClient):
+            def __init__(self, error_rate):
+                """0 < error_rate <= 100"""
 
-    # add 30 clients which were incrementing but not phoning home until now
-    stale_clients = [TestClient() for i in range(30)]
-    for iteration in range(30):
-        for client in stale_clients:
-            client.increment()
-    sim.clients.extend(stale_clients)
+                TestClient.__init__(self)
+                self.error_rate = error_rate
 
-    # run for 25 iterations
-    sim.iterate(25)
+            def test(self):
+                if random.randint(0,100) > self.error_rate:
+                    return True
+                return False
 
-    # add 30 clients which were randomly incrementing but not phoning home until now
-    stale_clients = [RandomFailureClient(random.randint(0,50)) for i in range(30)]
-    for iteration in range(30):
-        for client in stale_clients:
-            if client.test():
+        # add 50 clients which randomly fail from 0-50% of the time
+        self.clients.extend([RandomFailureClient(random.randint(0,50)) for i in range(50)])
+
+        # run for 100 iterations
+        self.iterate(100)
+
+        # add 20 clients which always succeed
+        self.clients.extend(TestClient() for i in range(20))
+
+        # run for 25 iterations
+        self.iterate(25)
+
+        # add 30 clients which were incrementing but not phoning home until now
+        stale_clients = [TestClient() for i in range(30)]
+        for iteration in range(30):
+            for client in stale_clients:
                 client.increment()
-    sim.clients.extend(stale_clients)
+        self.clients.extend(stale_clients)
 
-    # run for 25 iterations
-    sim.iterate(25)
+        # run for 25 iterations
+        self.iterate(25)
 
-    sim.counter.dump()
-    assert sim.counter.count() == len(sim.clients)
+        # add 30 clients which were randomly incrementing but not phoning home until now
+        stale_clients = [RandomFailureClient(random.randint(0,50)) for i in range(30)]
+        for iteration in range(30):
+            for client in stale_clients:
+                if client.test():
+                    client.increment()
+        self.clients.extend(stale_clients)
+
+        # run for 25 iterations
+        self.iterate(25)
+
+        self.counter.dump()
+        assert self.counter.count() == len(self.clients)
 
 class State:
     '''State of the entire system'''
@@ -179,7 +178,7 @@ def main():
         sys.exit(1)
 
     if sys.argv[1] == '-t':
-        test()
+        Simulator().test()
         sys.exit(0)
 
     (apachelog, datafile) = sys.argv[1:]
