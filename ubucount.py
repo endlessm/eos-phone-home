@@ -175,10 +175,10 @@ class State:
 
             channel_counters.setdefault(dcd, Counter()).add(count)
 
-            stats[dcd][0] = stats.setdefault(dcd, [0,0])[0] + 1
-
-        for channel, counter in channel_counters.iteritems():
-            stats[channel][1] = counter.count()
+            date = time.strftime('%Y-%m-%d', time.localtime(timestamp))
+            st = stats.setdefault(dcd, {}).setdefault(date, [0,0])
+            st[0] += 1
+            st[1] = channel_counters[dcd].count()
 
         cur.execute('DELETE FROM last_update')
         cur.execute('INSERT INTO last_update VALUES (?)', (last_update,))
@@ -228,7 +228,7 @@ class State:
     def _current_stats(self):
         '''Get most recent per-day/counter stats.
 
-        Return channel->[day, count] map.
+        Return channel->date->[day, count] map.
         '''
         cur = self.db.cursor()
         cur.execute('SELECT timestamp FROM last_update')
@@ -239,7 +239,7 @@ class State:
         cur.execute('SELECT channel, day, count FROM history WHERE date = ?',
                 (last_update,))
         for (channel, day, count) in cur:
-            map[channel] = [day, count]
+            map.setdefault(channel, {})[last_update] = [day, count]
 
         return map
 
@@ -247,13 +247,10 @@ class State:
         '''Set most recent per-day/counter stats.'''
 
         cur = self.db.cursor()
-        cur.execute('SELECT timestamp FROM last_update')
-        last_update = time.strftime('%Y-%m-%d',
-                time.localtime(float(cur.fetchone()[0])))
-
-        for channel, (day, count) in stats.iteritems():
-            cur.execute('INSERT OR REPLACE INTO history VALUES (?, ?, ?, ?)',
-                    (channel, last_update, day, count))
+        for channel, per_date in stats.iteritems():
+            for date, (day, count) in per_date.iteritems():
+                cur.execute('INSERT OR REPLACE INTO history VALUES (?, ?, ?, ?)',
+                        (channel, date, day, count))
 
 def parse_args():
     '''Parse command line args.

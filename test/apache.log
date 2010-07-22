@@ -9,3 +9,4 @@
 192.168.2.102 - - [23/Jul/2010:12:34:01 +0200] "GET /census?count=2&dcd=canonical-foo-123 HTTP/1.0" 200 3 "-" "Wget/1.12 (linux-gnu)"
 12.123.23.245 - - [23/Jul/2010:16:58:20 +0200] "GET /census?count=1&dcd=canonical-bar-1337 HTTP/1.0" 200 3 "-" "Wget/1.12 (linux-gnu)"
 12.123.23.245 - - [24/Jul/2010:16:58:20 +0200] "GET /census?count=2&dcd=canonical-bar-1337 HTTP/1.0" 200 3 "-" "Wget/1.12 (linux-gnu)"
+192.168.2.102 - - [25/Jul/2010:12:34:01 +0200] "GET /census?count=2&dcd=canonical-foo-123 HTTP/1.0" 200 3 "-" "Wget/1.12 (linux-gnu)"
