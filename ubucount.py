@@ -8,7 +8,7 @@ import os
 import urlparse
 import operator
 import optparse
-import cPickle as pickle
+import sqlite3 as dbapi2
 
 class Counter:
     def __init__(self):
@@ -106,34 +106,37 @@ class Simulator:
 class State:
     '''State of the entire system'''
 
-    def __init__(self):
-        '''Initialize an empty state'''
-
-        self.channel_map = {}
-        self.last_time = 0
-
-    def load(self, path):
-        '''Load state from a file'''
-
-        f = open(path)
-        (self.channel_map, self.last_time) = pickle.load(f)
-        f.close()
-
-    def save(self, path):
-        '''Save state to file.
-
-        This happens atomically.
+    def __init__(self, dbpath):
+        '''Initialize state from a database
+        
+        If the db does not exist yet, it will be created.
         '''
-        f = open(path + '.new', 'w')
-        try:
-            pickle.dump((self.channel_map, self.last_time), f)
-            f.flush()
-            os.fsync(f.fileno())
-            f.close()
-            os.rename(path + '.new', path)
-        except:
-            os.unlink(path + '.new')
-            raise
+        init = not os.path.exists(dbpath)
+        self.db = dbapi2.connect(dbpath)
+
+        if init:
+            cur = self.db.cursor()
+            cur.execute('''CREATE TABLE db_version (
+                version INT NOT NULL)''')
+
+            cur.execute('''CREATE TABLE last_update (
+                timestamp DOUBLE NOT NULL)''')
+
+            cur.execute('''CREATE TABLE counters (
+                channel CHAR(100) PRIMARY KEY,
+                counters TEXT)''')
+
+            cur.execute('''CREATE TABLE history (
+                channel CHAR(100),
+                date TIMESTAMP NOT NULL,
+                total INT NOT NULL,
+                day INT NOT NULL,
+                count INT NOT NULL)''')
+
+            cur.execute('INSERT INTO db_version VALUES (0)')
+            cur.execute("INSERT INTO last_update VALUES (0.0)")
+
+            self.db.commit()
 
     def update_from_log(self, path):
         '''Update status from Apache log.
@@ -142,14 +145,21 @@ class State:
         '''
         census_re = re.compile('\d+\.\d+\.\d+\.\d+[\s-]+\[(.+?) [-+]\d{4}\] "GET /census\?([^\s"]+)')
 
+        cur = self.db.cursor()
+        cur.execute('SELECT timestamp FROM last_update')
+        last_update = cur.fetchone()[0]
+
+        channel_counters = self._counters_from_db()
+
         for line in open(path):
             m = census_re.match(line)
             if not m:
                 continue
             timestamp = time.mktime(time.strptime(m.group(1), '%d/%b/%Y:%H:%M:%S'))
-            if timestamp <= self.last_time:
-                #print 'ignoring previously seen line', line
+            if timestamp <= last_update:
+                print 'ignoring previously seen line', line
                 continue
+            last_update = max(timestamp, last_update)
 
             args = urlparse.parse_qs(m.group(2))
             try:
@@ -162,15 +172,39 @@ class State:
                 
             #print 'timestamp: %f (%s), DCD: %s, count: %i' % (timestamp, m.group(1), dcd, count)
 
-            self.channel_map.setdefault(dcd, Counter()).add(count)
+            channel_counters.setdefault(dcd, Counter()).add(count)
 
-        self.last_time = timestamp
+        self._counters_to_db(channel_counters)
+        cur.execute('DELETE FROM last_update')
+        cur.execute('INSERT INTO last_update VALUES (?)', (last_update,))
+        self.db.commit()
 
     def dump(self):
-        for channel, counter in self.channel_map.iteritems():
+        for channel, counter in self._counters_from_db().iteritems():
             print '---- %s ---' % channel
             print 'machines:', counter.count()
             print 'hist:', counter.counters
+
+    def _counters_from_db(self):
+        '''Return a channel->Counter map from DB.'''
+
+        counters = {}
+        cur = self.db.cursor()
+        cur.execute('SELECT * FROM counters')
+        for channel, counter_str in cur:
+            counters[channel] = Counter()
+            counters[channel].counters = eval(counter_str, {}, {})
+
+        return counters
+
+    def _counters_to_db(self, map):
+        '''Write channel->Counter map to DB.'''
+
+        cur = self.db.cursor()
+        cur.execute('DELETE FROM counters')
+        for (channel, counters) in map.iteritems():
+            cur.execute('INSERT INTO counters VALUES (?, ?)', (channel,
+                    repr(counters.counters)))
 
 def parse_args():
     '''Parse command line args.
@@ -181,16 +215,16 @@ def parse_args():
     parser = optparse.OptionParser()
     parser.add_option('-t', '--test', dest='test', action='store_true',
             help='Run simulator for testing the algorithm')
-    parser.add_option('-d', '--data-file', dest='datafile', metavar='PATH',
-            help='Path to data file')
+    parser.add_option('-d', '--database', dest='database', metavar='PATH',
+            help='Path to database')
     parser.add_option('-l', '--log', dest='logfile', metavar='PATH',
             help='Update data with Apache log file.')
 
     (opts, args) = parser.parse_args()
 
     if not opts.test:
-        if not opts.datafile:
-            parser.error('ERROR: You need to specify a data file with --data-file.  See --help')
+        if not opts.database:
+            parser.error('ERROR: You need to specify a database with --database.  See --help')
 
     return (opts, args)
 
@@ -201,11 +235,8 @@ def main():
         Simulator().test()
         sys.exit(0)
 
-    state = State()
-    if os.path.exists(opts.datafile):
-        state.load(opts.datafile)
+    state = State(opts.database)
     state.update_from_log(opts.logfile)
-    state.save(opts.datafile)
     state.dump()
 
 if __name__ == '__main__':
