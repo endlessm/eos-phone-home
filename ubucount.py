@@ -301,6 +301,8 @@ def parse_args():
             help='Run simulator for testing the algorithm')
     parser.add_option('-d', '--database', dest='database', metavar='PATH',
             help='Path to database')
+    parser.add_option('--text', dest='text',  action='store_true',
+            help='Dump current history to stdout.')
     parser.add_option('-l', '--log', dest='logfile', metavar='PATH',
             help='Update data with Apache log file.')
     parser.add_option('-g', '--gnuplot', dest='gnuplot', metavar='DIR',
@@ -325,6 +327,8 @@ def main():
 
     if opts.logfile:
         state.update_from_log(opts.logfile)
+
+    if opts.text:
         state.dump()
 
     if opts.gnuplot:
