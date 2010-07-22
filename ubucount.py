@@ -128,10 +128,10 @@ class State:
 
             cur.execute('''CREATE TABLE history (
                 channel CHAR(100),
-                date TIMESTAMP NOT NULL,
-                total INT NOT NULL,
+                date CHAR(12),
                 day INT NOT NULL,
-                count INT NOT NULL)''')
+                count INT NOT NULL,
+                PRIMARY KEY (channel, date))''')
 
             cur.execute('INSERT INTO db_version VALUES (0)')
             cur.execute("INSERT INTO last_update VALUES (0.0)")
@@ -150,6 +150,7 @@ class State:
         last_update = cur.fetchone()[0]
 
         channel_counters = self._counters_from_db()
+        stats = self._current_stats()
 
         for line in open(path):
             m = census_re.match(line)
@@ -157,7 +158,7 @@ class State:
                 continue
             timestamp = time.mktime(time.strptime(m.group(1), '%d/%b/%Y:%H:%M:%S'))
             if timestamp <= last_update:
-                print 'ignoring previously seen line', line
+                #print 'ignoring previously seen line', line
                 continue
             last_update = max(timestamp, last_update)
 
@@ -174,9 +175,15 @@ class State:
 
             channel_counters.setdefault(dcd, Counter()).add(count)
 
-        self._counters_to_db(channel_counters)
+            stats[dcd][0] = stats.setdefault(dcd, [0,0])[0] + 1
+
+        for channel, counter in channel_counters.iteritems():
+            stats[channel][1] = counter.count()
+
         cur.execute('DELETE FROM last_update')
         cur.execute('INSERT INTO last_update VALUES (?)', (last_update,))
+        self._counters_to_db(channel_counters)
+        self._set_current_stats(stats)
         self.db.commit()
 
     def dump(self):
@@ -184,6 +191,17 @@ class State:
             print '---- %s ---' % channel
             print 'machines:', counter.count()
             print 'hist:', counter.counters
+
+        cur = self.db.cursor()
+        cur.execute('SELECT DISTINCT channel FROM history')
+        channels = [x[0] for x in cur.fetchall()]
+        print '====== HISTORY ========'
+        for ch in channels:
+            print '---- channel: %s -----' % ch
+            cur.execute('SELECT date, day, count FROM history WHERE channel = ? ORDER BY date', 
+                    (ch,))
+            for (date, day, count) in cur:
+                print '%s: %4i pings, %4i machines' % (date, day, count)
 
     def _counters_from_db(self):
         '''Return a channel->Counter map from DB.'''
@@ -205,6 +223,36 @@ class State:
         for (channel, counters) in map.iteritems():
             cur.execute('INSERT INTO counters VALUES (?, ?)', (channel,
                     repr(counters.counters)))
+
+    def _current_stats(self):
+        '''Get most recent per-day/counter stats.
+
+        Return channel->[day, count] map.
+        '''
+        cur = self.db.cursor()
+        cur.execute('SELECT timestamp FROM last_update')
+        last_update = time.strftime('%Y-%m-%d',
+                time.localtime(float(cur.fetchone()[0])))
+
+        map = {}
+        cur.execute('SELECT channel, day, count FROM history WHERE date = ?',
+                (last_update,))
+        for (channel, day, count) in cur:
+            map[channel] = [day, count]
+
+        return map
+
+    def _set_current_stats(self, stats):
+        '''Set most recent per-day/counter stats.'''
+
+        cur = self.db.cursor()
+        cur.execute('SELECT timestamp FROM last_update')
+        last_update = time.strftime('%Y-%m-%d',
+                time.localtime(float(cur.fetchone()[0])))
+
+        for channel, (day, count) in stats.iteritems():
+            cur.execute('INSERT OR REPLACE INTO history VALUES (?, ?, ?, ?)',
+                    (channel, last_update, day, count))
 
 def parse_args():
     '''Parse command line args.
