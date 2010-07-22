@@ -187,21 +187,22 @@ class State:
         self.db.commit()
 
     def dump(self):
-        for channel, counter in self._counters_from_db().iteritems():
-            print '---- %s ---' % channel
-            print 'machines:', counter.count()
-            print 'hist:', counter.counters
+        #print '====== COUNTERS ========'
+        #for channel, counter in self._counters_from_db().iteritems():
+        #    print '---- %s ---' % channel
+        #    print 'machines:', counter.count()
+        #    print 'hist:', counter.counters
 
         cur = self.db.cursor()
         cur.execute('SELECT DISTINCT channel FROM history')
         channels = [x[0] for x in cur.fetchall()]
-        print '====== HISTORY ========'
+        #print '====== HISTORY ========'
         for ch in channels:
             print '---- channel: %s -----' % ch
             cur.execute('SELECT date, day, count FROM history WHERE channel = ? ORDER BY date', 
                     (ch,))
             for (date, day, count) in cur:
-                print '%s: %4i pings, %4i machines' % (date, day, count)
+                print '%s: %4i updates sent, %4i machines total' % (date, day, count)
 
     def _counters_from_db(self):
         '''Return a channel->Counter map from DB.'''
