@@ -5,10 +5,13 @@ import re
 import sys
 import time
 import os
+import os.path
 import urlparse
 import operator
 import optparse
 import sqlite3 as dbapi2
+import subprocess
+import tempfile
 
 class Counter:
     def __init__(self):
@@ -204,6 +207,41 @@ class State:
             for (date, day, count) in cur:
                 print '%s: %4i updates sent, %4i machines total' % (date, day, count)
 
+    def plot(self, directory):
+        '''Generate gnuplot charts.
+
+        This will create <channel>.png files in given output directory.
+        '''
+
+        cur = self.db.cursor()
+        cur.execute('SELECT DISTINCT channel FROM history')
+        channels = [x[0] for x in cur.fetchall()]
+
+        for ch in channels:
+            gnuplot = subprocess.Popen(['gnuplot'], stdin=subprocess.PIPE)
+            print >> gnuplot.stdin, '''set xdata time
+set timefmt "%Y-%m-%d"
+set terminal png
+'''
+            f = tempfile.NamedTemporaryFile()
+            cur.execute('SELECT date, day, count FROM history WHERE channel = ? ORDER BY date', 
+                    (ch,))
+            for (date, day, count) in cur:
+                print >> f, '%s\t%i\t%i' % (date, day, count)
+
+            f.flush()
+
+            print >> gnuplot.stdin, 'set out "%s.png"\nset title "%s"' % (
+                    os.path.join(directory, ch), ch)
+            #print >> gnuplot.stdin, 'set multiplot'
+            print >> gnuplot.stdin, 'set yrange [0:]'
+            print >> gnuplot.stdin, '''
+plot "%s" using 1:2 title "#updates on that day" with impulses lw 10 lt 3 , \
+     "%s" using 1:3 title "#machines" with linespoints lw 4 lt 1''' % (f.name, f.name)
+
+            print >> gnuplot.stdin, 'exit'
+            assert gnuplot.wait() == 0, 'gnuplot failed with %i' % gnuplot.returncode
+
     def _counters_from_db(self):
         '''Return a channel->Counter map from DB.'''
 
@@ -265,6 +303,8 @@ def parse_args():
             help='Path to database')
     parser.add_option('-l', '--log', dest='logfile', metavar='PATH',
             help='Update data with Apache log file.')
+    parser.add_option('-g', '--gnuplot', dest='gnuplot', metavar='DIR',
+            action='store', help='Generate graphs to given output directory')
 
     (opts, args) = parser.parse_args()
 
@@ -282,8 +322,13 @@ def main():
         sys.exit(0)
 
     state = State(opts.database)
-    state.update_from_log(opts.logfile)
-    state.dump()
+
+    if opts.logfile:
+        state.update_from_log(opts.logfile)
+        state.dump()
+
+    if opts.gnuplot:
+        state.plot(opts.gnuplot)
 
 if __name__ == '__main__':
     main()
