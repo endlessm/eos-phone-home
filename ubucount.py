@@ -143,7 +143,7 @@ class State:
         
         This will only include items which are newer than the last timestamp.
         '''
-        census_re = re.compile('\d+\.\d+\.\d+\.\d+[\s-]+\[(.+?) [-+]\d{4}\] "GET /census\?([^\s"]+)')
+        census_re = re.compile('\d+\.\d+\.\d+\.\d+[\s-]+\[(.+?) [-+]\d{4}\] "GET /census\?([^\s"]+).*?" 2\d\d')
 
         cur = self.db.cursor()
         cur.execute('SELECT timestamp FROM last_update')
