@@ -234,7 +234,7 @@ set terminal png
             print >> gnuplot.stdin, 'set out "%s.png"\nset title "%s"' % (
                     os.path.join(directory, ch), ch)
             print >> gnuplot.stdin, '''set yrange [0:]
-plot "%s" using 1:2 title "#updates on that day" with impulses lw 10 lt 3 , \
+plot "%s" using 1:2 title "#updates on that day" with impulses lw 2 lt 3 , \
      "%s" using 1:3 title "#machines" with linespoints lw 4 lt 1''' % (f.name, f.name)
 
             print >> gnuplot.stdin, 'exit'
