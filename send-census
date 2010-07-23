@@ -9,11 +9,9 @@
 
 set -e
 
-#COUNTFILE=/var/lib/send-install-count/counter
-COUNTFILE=/tmp/send-install-count/counter
+COUNTFILE=/var/lib/send-install-count/counter
 DCD=/var/lib/ubuntu_dist_channel
-#SCRIPT=http://census.canonical.com/submit
-SCRIPT=http://www.piware.de/census
+SCRIPT=http://census.canonical.com/submit
 
 [ -e $DCD ] || exit 0
 
