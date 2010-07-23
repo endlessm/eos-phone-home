@@ -160,7 +160,7 @@ class State:
             if not m:
                 continue
             timestamp = time.mktime(time.strptime(m.group(1), '%d/%b/%Y:%H:%M:%S'))
-            if timestamp <= last_update:
+            if timestamp < last_update:
                 #print 'ignoring previously seen line', line
                 continue
             last_update = max(timestamp, last_update)
