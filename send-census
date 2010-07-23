@@ -24,13 +24,18 @@ else
     cur=0
 fi
 
-((cur=cur+1))
-
-# update counter
-mkdir -p $(dirname $COUNTFILE)
-echo $cur > $COUNTFILE
-
 # get DCD
 channel=$(sed -n '/^[[:alnum:]]/ { p; q}' $DCD)
 
-wget -O - -q "$SCRIPT?count=$cur&dcd=$channel"
+# report in
+if ! wget -O - -q "$SCRIPT?count=$cur&dcd=$channel"; then
+    #echo "failed"
+    exit 0
+fi
+
+# update counter
+((cur=cur+1))
+mkdir -p $(dirname $COUNTFILE)
+echo $cur > $COUNTFILE
+
+
