@@ -1,5 +1,15 @@
 #!/usr/bin/python
 
+'''Evaluate apache logs from send-census.
+
+This maintains a local SQLite database for the historic data and the current
+state, and can produce text and chart outputs.
+'''
+
+__author__ = 'Matt Zimmerman <matt.zimmerman@canonical.com>, Martin Pitt <martin.pitt@caonical.com>'
+__copyright__ = '(C) 2010 Canonical Ltd.'
+__license__ = 'GPL v2 or later'
+
 import random
 import re
 import sys
