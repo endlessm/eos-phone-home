@@ -1,1 +1,2 @@
 send-census /etc/cron.daily
+debian/46disable_census /usr/share/initramfs-tools/scripts/casper-bottom
