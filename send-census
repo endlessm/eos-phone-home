@@ -1,9 +1,9 @@
 #!/bin/bash
 # Send an "I am alive" ping to Canonical. This is used for surveying how many
 # original OEM installs are still existing on real machines. Note that this
-# does not send any machine or user specific data; it only transmits the
-# operating system version (/var/lib/ubuntu_dist_channel) and a counter how
-# many pings were sent.
+# does not send any user specific data; it only transmits the operating system
+# version (/var/lib/ubuntu_dist_channel), the machine product name, and a
+# counter how many pings were sent.
 #
 # (C) 2010 Canonical Ltd.
 # License: GPL v2 or later
@@ -26,8 +26,12 @@ fi
 # get DCD
 channel=$(sed -n '/^[[:alnum:]]/ { p; q}' $DCD)
 
+# get machine product name
+product=$(< /sys/class/dmi/id/product_name) || product=''
+product=${product/% *}
+
 # report in
-if ! wget -O - -q "$SCRIPT?count=$cur&dcd=$channel"; then
+if ! wget -O - -q "$SCRIPT?count=$cur&dcd=$channel&product=$product"; then
     #echo "failed"
     exit 0
 fi
