@@ -22,6 +22,7 @@ import optparse
 import sqlite3 as dbapi2
 import subprocess
 import tempfile
+import GeoIP
 
 class Counter:
     def __init__(self):
@@ -156,7 +157,7 @@ class State:
         
         This will only include items which are newer than the last timestamp.
         '''
-        census_re = re.compile('\d+\.\d+\.\d+\.\d+[\s-]+\[(.+?) [-+]\d{4}\] "GET /census\?([^\s"]+).*?" [2,3]\d\d .*[wW]get')
+        census_re = re.compile('(\d+\.\d+\.\d+\.\d+)[\s-]+\[(.+?) [-+]\d{4}\] "GET /census\?([^\s"]+).*?" [2,3]\d\d .*[wW]get')
 
         cur = self.db.cursor()
         cur.execute('SELECT timestamp FROM last_update')
@@ -165,30 +166,37 @@ class State:
         channel_counters = self._counters_from_db()
         stats = self._current_stats()
 
+        geoip = GeoIP.new(GeoIP.GEOIP_MEMORY_CACHE)
+
         for line in open(path):
             m = census_re.match(line)
             if not m:
                 continue
-            timestamp = time.mktime(time.strptime(m.group(1), '%d/%b/%Y:%H:%M:%S'))
+            timestamp = time.mktime(time.strptime(m.group(2), '%d/%b/%Y:%H:%M:%S'))
             if timestamp < last_update:
                 #print 'ignoring previously seen line', line
                 continue
             last_update = max(timestamp, last_update)
 
             channels = []
-            args = urlparse.parse_qs(m.group(2))
+            args = urlparse.parse_qs(m.group(3))
             try:
                 dcd = args['dcd'][0]
                 assert len(dcd) > 0
                 channels.append(dcd)
                 count = int(args['count'][0])
             except (TypeError, ValueError, KeyError):
-                print 'ERROR! Invalid census query:', m.group(2)
+                print 'ERROR! Invalid census query:', m.group(3)
                 continue
             if 'product' in args:
                 channels.append('%s %s' % (dcd, args['product'][0]))
+
+            # try to resolve country
+            country = geoip.country_code_by_addr(m.group(1))
+            if country:
+                channels.append('%s %s' % (dcd, country))
                 
-            #print 'timestamp: %f (%s), channels: %s, count: %i' % (timestamp, m.group(1), str(channels), count)
+            #print 'timestamp: %f (%s), channels: %s, count: %i' % (timestamp, m.group(2), str(channels), count)
 
             date = time.strftime('%Y-%m-%d', time.localtime(timestamp))
 
