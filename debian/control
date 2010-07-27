@@ -4,7 +4,7 @@ Priority: extra
 Maintainer: Martin Pitt <martin.pitt@canonical.com>
 Build-Depends: debhelper (>= 7)
 Standards-Version: 3.9.0
-Vcs-Bzr: lp:~pitti/+junk/ubucount
+Vcs-Bzr: https://code.launchpad.net/~install-census-developers/install-census/trunk
 
 Package: canonical-census
 Architecture: all
