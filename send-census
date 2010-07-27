@@ -31,7 +31,7 @@ product=$(< /sys/class/dmi/id/product_name) || product=''
 product=${product/% *}
 
 # report in
-if ! wget -O - -q "$SCRIPT?count=$cur&dcd=$channel&product=$product"; then
+if ! wget -O /dev/null -q "$SCRIPT?count=$cur&dcd=$channel&product=$product"; then
     #echo "failed"
     exit 0
 fi
