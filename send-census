@@ -16,6 +16,9 @@ SCRIPT=http://census.canonical.com/submit
 
 [ -e $DCD ] || exit 0
 
+# read release info
+. /etc/lsb-release || :
+
 # get current count
 if [ -e $COUNTFILE ]; then
     cur=$(< $COUNTFILE)
@@ -30,8 +33,9 @@ channel=$(sed -n '/^[[:alnum:]]/ { p; q}' $DCD)
 product=$(< /sys/class/dmi/id/product_name) || product=''
 product=${product/% *}
 
+
 # report in
-if ! wget -O /dev/null -q "$SCRIPT?count=$cur&dcd=$channel&product=$product"; then
+if ! wget -O /dev/null -q "$SCRIPT?count=$cur&dcd=$channel&product=$product&release=$DISTRIB_RELEASE"; then
     #echo "failed"
     exit 0
 fi
