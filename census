@@ -175,23 +175,28 @@ class State:
                 continue
             last_update = max(timestamp, last_update)
 
+            channels = []
             args = urlparse.parse_qs(m.group(2))
             try:
                 dcd = args['dcd'][0]
                 assert len(dcd) > 0
+                channels.append(dcd)
                 count = int(args['count'][0])
             except (TypeError, ValueError, KeyError):
                 print 'ERROR! Invalid census query:', m.group(2)
                 continue
+            if 'product' in args:
+                channels.append('%s %s' % (dcd, args['product'][0]))
                 
-            #print 'timestamp: %f (%s), DCD: %s, count: %i' % (timestamp, m.group(1), dcd, count)
-
-            channel_counters.setdefault(dcd, Counter()).add(count)
+            #print 'timestamp: %f (%s), channels: %s, count: %i' % (timestamp, m.group(1), str(channels), count)
 
             date = time.strftime('%Y-%m-%d', time.localtime(timestamp))
-            st = stats.setdefault(dcd, {}).setdefault(date, [0,0])
-            st[0] += 1
-            st[1] = channel_counters[dcd].count()
+
+            for c in channels:
+                channel_counters.setdefault(c, Counter()).add(count)
+                st = stats.setdefault(c, {}).setdefault(date, [0,0])
+                st[0] += 1
+                st[1] = channel_counters[c].count()
 
         cur.execute('DELETE FROM last_update')
         cur.execute('INSERT INTO last_update VALUES (?)', (last_update,))
