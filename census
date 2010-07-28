@@ -324,15 +324,15 @@ def parse_args():
     Return (options, args) tuple.
     '''
 
-    parser = optparse.OptionParser()
+    parser = optparse.OptionParser(usage='\n  %prog [options]\n  %prog [options] -l logfile [logfile ..]')
     parser.add_option('-t', '--test', dest='test', action='store_true',
             help='Run simulator for testing the algorithm')
     parser.add_option('-d', '--database', dest='database', metavar='PATH',
             help='Path to database')
     parser.add_option('--text', dest='text',  action='store_true',
             help='Dump current history to stdout.')
-    parser.add_option('-l', '--log', dest='logfile', metavar='PATH',
-            help='Update data with Apache log file.')
+    parser.add_option('-l', '--log', dest='log', action='store_true',
+            help='Update data with Apache log file(s).')
     parser.add_option('-g', '--gnuplot', dest='gnuplot', metavar='DIR',
             action='store', help='Generate graphs to given output directory')
     parser.add_option('--daily', dest='plot_daily', action='store_true',
@@ -343,6 +343,10 @@ def parse_args():
     if not opts.test:
         if not opts.database:
             parser.error('ERROR: You need to specify a database with --database.  See --help')
+
+    if opts.log:
+        if len(args) == 0:
+            parser.error('ERROR: You need to specify at least one log file. See --help')
 
     return (opts, args)
 
@@ -355,8 +359,9 @@ def main():
 
     state = State(opts.database)
 
-    if opts.logfile:
-        state.update_from_log(opts.logfile)
+    if opts.log:
+        for f in args:
+            state.update_from_log(f)
 
     if opts.text:
         state.dump()
