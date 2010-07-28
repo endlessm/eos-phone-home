@@ -22,6 +22,7 @@ import optparse
 import sqlite3 as dbapi2
 import subprocess
 import tempfile
+import gzip
 import GeoIP
 
 class Counter:
@@ -168,7 +169,12 @@ class State:
 
         geoip = GeoIP.new(GeoIP.GEOIP_MEMORY_CACHE)
 
-        for line in open(path):
+        if path.endswith('.gz'):
+            f = gzip.open(path)
+        else:
+            f = open(path)
+
+        for line in f:
             m = census_re.match(line)
             if not m:
                 continue
