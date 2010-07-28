@@ -261,10 +261,10 @@ set terminal png
             print >> gnuplot.stdin, 'set yrange [0:]'
 
             if daily_pings:
-                cmd = 'plot "%s" using 1:3 title "#machines" with linespoints lw 4 lt 1 , \
+                cmd = 'plot "%s" using 1:3 title "#machines" with lines lw 3 lt 1 , \
                   "%s" using 1:2 title "#updates on that day" with impulses lw 2 lt 3' % (f.name, f.name)
             else:
-                cmd = 'plot "%s" using 1:3 title "" with linespoints lw 4 lt 1' % f.name
+                cmd = 'plot "%s" using 1:3 title "" with line lw 3 lt 1' % f.name
             print >> gnuplot.stdin, cmd
 
             print >> gnuplot.stdin, 'exit'
