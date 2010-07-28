@@ -1,0 +1,38 @@
+#!/usr/bin/python
+
+'''Create a large apache log over one year.
+
+Every machine updates randomly every three days on average, and a new machine
+is registered every four days on average.
+'''
+
+import random
+import datetime
+import sys
+
+days = 365
+startday = datetime.date(2010, 1, 1)
+machines = []
+
+new_machine_rate = 1/4.0
+machine_ping_rate = 1/3.0
+
+def ping(day, count):
+    time = (startday + datetime.timedelta(day)).strftime('%d/%b/%Y:01:00:00 +0000')
+    print '217.235.104.216 - - [%s] "GET /census?count=%i&dcd=foo-123 HTTP/1.0" 200 3 "-" "Wget"' % (time, count)
+
+for day in xrange(days+1):
+    # send pings
+    for i in xrange(len(machines)):
+        if random.random() <= machine_ping_rate:
+            machines[i] += 1
+            ping (day, machines[i])
+
+    # instantiate new machine?
+    if random.random() <= new_machine_rate:
+        machines.append(0)
+        ping(day, 0)
+
+    if (days - day) % 30 == 0:
+        print >> sys.stderr, '%i machines %i days before end' % (
+                len(machines), (days - day))
