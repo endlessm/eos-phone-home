@@ -153,7 +153,7 @@ class State:
 
             self.db.commit()
 
-    def update_from_log(self, path):
+    def update_from_log(self, path, after = None):
         '''Update status from Apache log.
         
         This will only include items which are newer than the last timestamp.
@@ -179,6 +179,10 @@ class State:
             if not m:
                 continue
             timestamp = time.mktime(time.strptime(m.group(2), '%d/%b/%Y:%H:%M:%S'))
+            if after and timestamp < after:
+                print 'ignoring too early date', line
+                continue
+
             if timestamp < last_update:
                 #print 'ignoring previously seen line', line
                 continue
@@ -339,6 +343,8 @@ def parse_args():
             help='Dump current history to stdout.')
     parser.add_option('-l', '--log', dest='log', action='store_true',
             help='Update data with Apache log file(s).')
+    parser.add_option('--after', dest='after', metavar='YYYY-MM-DD',
+            help='Only consider updates after given date')
     parser.add_option('-g', '--gnuplot', dest='gnuplot', metavar='DIR',
             action='store', help='Generate graphs to given output directory')
     parser.add_option('--daily', dest='plot_daily', action='store_true',
@@ -354,6 +360,12 @@ def parse_args():
         if len(args) == 0:
             parser.error('ERROR: You need to specify at least one log file. See --help')
 
+    if opts.after:
+        try:
+            opts.after = time.mktime(time.strptime(opts.after, '%Y-%m-%d'))
+        except ValueError:
+            parser.error('ERROR: Invalid --after date')
+
     return (opts, args)
 
 def main():
@@ -367,7 +379,7 @@ def main():
 
     if opts.log:
         for f in args:
-            state.update_from_log(f)
+            state.update_from_log(f, opts.after)
 
     if opts.text:
         state.dump()
