@@ -207,7 +207,7 @@ class State:
                 st[1] = channel_counters[c].count()
 
         cur.execute('DELETE FROM last_update')
-        cur.execute('INSERT INTO last_update VALUES (?)', (last_update,))
+        cur.execute('INSERT INTO last_update VALUES (?)', (last_update+.1,))
         self._counters_to_db(channel_counters)
         self._set_current_stats(stats)
         self.db.commit()
