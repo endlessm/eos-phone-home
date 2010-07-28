@@ -268,7 +268,7 @@ set terminal png
 
             print >> gnuplot.stdin, 'set out "%s.png"\nset title "%s"' % (
                     os.path.join(directory, ch), ch)
-            print >> gnuplot.stdin, 'set yrange [0:]'
+            print >> gnuplot.stdin, 'set yrange [0:]\nset xtics rotate'
 
             if daily_pings:
                 cmd = 'plot "%s" using 1:3 title "#machines" with lines lw 3 lt 1 , \
