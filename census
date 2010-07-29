@@ -153,10 +153,13 @@ class State:
 
             self.db.commit()
 
-    def update_from_log(self, path, after = None):
+    def update_from_log(self, path, map_dcd, after=None):
         '''Update status from Apache log.
         
         This will only include items which are newer than the last timestamp.
+
+        map_dcd is a (regexp, name) list for mapping all DCDs matching regexp
+        to a meta-channel "name".
         '''
         census_re = re.compile('(\d+\.\d+\.\d+\.\d+)[\s-]+\[(.+?) [-+]\d{4}\] "GET /census\?([^\s"]+).*?" [2,3]\d\d .*[wW]get')
 
@@ -193,6 +196,13 @@ class State:
             try:
                 dcd = args['dcd'][0]
                 assert len(dcd) > 0
+
+                # map DCD
+                for (r, name) in map_dcd:
+                    if r.match(dcd):
+                        dcd = name
+                        break
+
                 channels.append(dcd)
                 count = int(args['count'][0])
             except (TypeError, ValueError, KeyError):
@@ -345,6 +355,8 @@ def parse_args():
             help='Update data with Apache log file(s).')
     parser.add_option('--after', metavar='YYYY-MM-DD',
             help='Only consider updates after given date')
+    parser.add_option('--map-dcd', action='append', metavar='name:REGEXP',
+            default=[], help='Map all distribution channel descriptors matching REGEXP to a meta-channel "name"')
     parser.add_option('-g', '--gnuplot', metavar='DIR', action='store',
             help='Generate graphs to given output directory')
     parser.add_option('--daily', action='store_true', default=False, 
@@ -366,6 +378,22 @@ def parse_args():
         except ValueError:
             parser.error('ERROR: Invalid --after date')
 
+    # turn --map-channel into a (regexp, name) list
+    map_dcd = []
+    for arg in opts.map_dcd:
+        try:
+            name, regexp = arg.split(':', 1)
+            assert len(name) > 0
+        except (AssertionError, ValueError):
+            parser.error('ERROR: --map-channel argument must be "name:REGEXP"')
+        try:
+            regexp = re.compile(regexp)
+        except Exception, e:
+            parser.error('ERROR: Invalid regular expression in --map-channel: %s' %
+                    str(e))
+        map_dcd.append((regexp, name))
+    opts.map_dcd = map_dcd
+
     return (opts, args)
 
 def main():
@@ -379,7 +407,7 @@ def main():
 
     if opts.log:
         for f in args:
-            state.update_from_log(f, opts.after)
+            state.update_from_log(f, opts.map_dcd, opts.after)
 
     if opts.text:
         state.dump()
