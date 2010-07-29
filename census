@@ -335,20 +335,20 @@ def parse_args():
     '''
 
     parser = optparse.OptionParser(usage='\n  %prog [options]\n  %prog [options] -l logfile [logfile ..]')
-    parser.add_option('-t', '--test', dest='test', action='store_true',
+    parser.add_option('-t', '--test', action='store_true',
             help='Run simulator for testing the algorithm')
-    parser.add_option('-d', '--database', dest='database', metavar='PATH',
+    parser.add_option('-d', '--database', metavar='PATH',
             help='Path to database')
-    parser.add_option('--text', dest='text',  action='store_true',
+    parser.add_option('--text', action='store_true',
             help='Dump current history to stdout.')
-    parser.add_option('-l', '--log', dest='log', action='store_true',
+    parser.add_option('-l', '--log', action='store_true',
             help='Update data with Apache log file(s).')
-    parser.add_option('--after', dest='after', metavar='YYYY-MM-DD',
+    parser.add_option('--after', metavar='YYYY-MM-DD',
             help='Only consider updates after given date')
-    parser.add_option('-g', '--gnuplot', dest='gnuplot', metavar='DIR',
-            action='store', help='Generate graphs to given output directory')
-    parser.add_option('--daily', dest='plot_daily', action='store_true',
-            default=False, help='Show number of received daily updates on plots')
+    parser.add_option('-g', '--gnuplot', metavar='DIR', action='store',
+            help='Generate graphs to given output directory')
+    parser.add_option('--daily', action='store_true', default=False, 
+            help='Show number of received daily updates on plots')
 
     (opts, args) = parser.parse_args()
 
@@ -385,7 +385,7 @@ def main():
         state.dump()
 
     if opts.gnuplot:
-        state.plot(opts.gnuplot, opts.plot_daily)
+        state.plot(opts.gnuplot, opts.daily)
 
 if __name__ == '__main__':
     main()
