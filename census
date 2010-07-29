@@ -180,7 +180,7 @@ class State:
                 continue
             timestamp = time.mktime(time.strptime(m.group(2), '%d/%b/%Y:%H:%M:%S'))
             if after and timestamp < after:
-                print 'ignoring too early date', line
+                #print 'ignoring too early date', line
                 continue
 
             if timestamp < last_update:
