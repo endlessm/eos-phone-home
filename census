@@ -14,6 +14,7 @@ import random
 import re
 import sys
 import time
+import datetime
 import os
 import os.path
 import urlparse
@@ -24,6 +25,11 @@ import subprocess
 import tempfile
 import gzip
 import GeoIP
+
+# highest plausible counter; we assume that each computer sends at most 3 pings
+# a day (which is a lot for cron.daily), every day since the start of the
+# project
+max_counter = (datetime.date.today() - datetime.date(2010, 7, 25)).days * 3
 
 class Counter:
     def __init__(self):
@@ -208,6 +214,11 @@ class State:
             except (TypeError, ValueError, KeyError):
                 print 'ERROR! Invalid census query:', m.group(3)
                 continue
+
+            if count < 0 or count > max_counter:
+                print 'ERROR! Ignoring invalid counter:', line 
+                continue
+
             if 'product' in args:
                 channels.append('%s %s' % (dcd, args['product'][0]))
 

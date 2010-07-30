@@ -15,3 +15,5 @@
 217.235.104.216 - - [26/Jul/2010:12:34:01 +0200] "GET /census?count=1&dcd=canonical-foo-123&product=SuperBook HTTP/1.0" 403 3 "-" "Wget/1.12 (linux-gnu)"
 193.85.232.179 - - [28/Jul/2010:01:00:00 +0200] "GET /census?count=0&dcd=canonical-bar-1337&product=SuperBook HTTP/1.0" 200 3 "-" "Wget/1.12 (linux-gnu)"
 193.85.232.179 - - [28/Jul/2010:01:01:00 +0200] "GET /census?count=0&dcd=canonical-bar-1337&product=SuperBook HTTP/1.0" 200 3 "-" "Wget/1.12 (linux-gnu)"
+193.85.232.179 - - [29/Jul/2010:01:01:00 +0200] "GET /census?count=-1&dcd=canonical-invalid-1&product=BreakBook HTTP/1.0" 200 3 "-" "Wget/1.12 (linux-gnu)"
+193.85.232.179 - - [29/Jul/2010:01:02:00 +0200] "GET /census?count=10000000&dcd=canonical-invalid-1&product=BreakBook HTTP/1.0" 200 3 "-" "Wget/1.12 (linux-gnu)"
