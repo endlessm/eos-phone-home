@@ -30,6 +30,8 @@ import GeoIP
 # a day (which is a lot for cron.daily), every day since the start of the
 # project
 max_counter = (datetime.date.today() - datetime.date(2010, 7, 25)).days * 3
+if max_counter < 100:
+    max_counter = 100
 
 class Counter:
     def __init__(self):
