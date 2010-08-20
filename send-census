@@ -35,8 +35,12 @@ product=${product/% *}
 
 
 # report in
-if ! wget -O /dev/null -q "$SCRIPT?count=$cur&dcd=$channel&product=$product&release=$DISTRIB_RELEASE"; then
-    #echo "failed"
+if ! out=$(wget -O - -q "$SCRIPT?count=$cur&dcd=$channel&product=$product&release=$DISTRIB_RELEASE"); then
+    #echo "wget failed"
+    exit 0
+fi
+if [ "$out" != "OK" ]; then
+    #echo "invalid page"
     exit 0
 fi
 
