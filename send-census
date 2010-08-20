@@ -19,12 +19,17 @@ SCRIPT=http://census.canonical.com/submit
 # read release info
 . /etc/lsb-release || :
 
-# get current count
+# we need to know that we can write the count file, otherwise we'd send a
+# perpetual stream of zeros
+mkdir -p $(dirname $COUNTFILE)
 if [ -e $COUNTFILE ]; then
-    cur=$(< $COUNTFILE)
+    [ -w $COUNTFILE ]
 else
-    cur=0
+    echo 0 > $COUNTFILE
 fi
+
+# get current count
+cur=$(< $COUNTFILE)
 
 # get DCD
 channel=$(sed -n '/^[[:alnum:]]/ { p; q}' $DCD)
@@ -46,7 +51,6 @@ fi
 
 # update counter
 ((cur=cur+1))
-mkdir -p $(dirname $COUNTFILE)
 echo $cur > $COUNTFILE
 
 

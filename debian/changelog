@@ -2,6 +2,9 @@ canonical-census (0.2) UNRELEASED; urgency=low
 
   * send-census: Verify that the census page delivers "OK", as opposed to some
     error messages, proxy pages, etc.
+  * sendd-census: Make sure that we can write the counter file. Otherwise, if
+    writing fails after we already sent the ping, we'd send a perpetual series
+    of zeros.
 
  -- Martin Pitt <martin.pitt@canonical.com>  Fri, 20 Aug 2010 14:03:26 +0200
 
