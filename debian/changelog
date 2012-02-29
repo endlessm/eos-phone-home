@@ -1,3 +1,9 @@
+canonical-census (0.3) precise; urgency=low
+
+  * Bumped version and changed distribution to precise for the Watauga project. 
+
+ -- Chris Townsend <christopher.townsend@canonical.com>  Wed, 29 Feb 2012 10:28:40 -0500
+
 canonical-census (0.2) UNRELEASED; urgency=low
 
   * send-census: Verify that the census page delivers "OK", as opposed to some
