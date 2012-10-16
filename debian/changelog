@@ -1,3 +1,11 @@
+canonical-census (0.3.1) precise; urgency=low
+
+  * source /scripts/casper-functions after the prereqs argument in the
+    46disable_census script.  This avoids warnings when updating initramfs
+    (LP: #1065574).
+
+ -- Kent Baxley <kent.baxley@canonical.com>  Tue, 16 Oct 2012 10:52:46 -0500
+
 canonical-census (0.3) precise; urgency=low
 
   * Bumped version and changed distribution to precise for the Watauga project. 
