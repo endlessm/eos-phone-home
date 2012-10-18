@@ -36,11 +36,12 @@ channel=$(sed -n '/^[[:alnum:]]/ { p; q}' $DCD)
 
 # get machine product name
 product=$(< /sys/class/dmi/id/product_name) || product=''
-product=${product/% *}
 
+# get machine vendor name
+vendor=$(< /sys/class/dmi/id/sys_vendor) || vendor=''
 
 # report in
-if ! out=$(wget -O - -q "$SCRIPT?count=$cur&dcd=$channel&product=$product&release=$DISTRIB_RELEASE"); then
+if ! out=$(wget -O - -q "$SCRIPT?count=$cur&dcd=$channel&product=$product&vendor=$vendor&release=$DISTRIB_RELEASE"); then
     #echo "wget failed"
     exit 0
 fi
