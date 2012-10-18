@@ -227,7 +227,7 @@ class State:
             #adding vendor information. we may want to change how we process this info later.
 
             if 'vendor' in args:
-                chanels.append('%s %s' % (dcd, args['vendor'][0]))
+                channels.append('%s %s' % (dcd, args['vendor'][0]))
             
             # try to resolve country
             country = geoip.country_code_by_addr(m.group(1))
