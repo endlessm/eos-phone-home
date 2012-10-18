@@ -1,3 +1,10 @@
+canonical-census (0.3.2) precise; urgency=low
+
+  * Do not truncate product information in send-census (LP: #1065530).
+  * Capture vendor info from sys_vendor (LP: #1065533).
+
+ -- Kent Baxley <kent.baxley@canonical.com>  Thu, 18 Oct 2012 10:07:09 -0500
+
 canonical-census (0.3.1) precise; urgency=low
 
   * source /scripts/casper-functions after the prereqs argument in the
