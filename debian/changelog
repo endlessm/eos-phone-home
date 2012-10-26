@@ -1,3 +1,10 @@
+canonical-census (0.3.4) precise; urgency=low
+
+  * Added a way to chop off trailing whitespace on sys_vendor and 
+    product_id. Some machines leave a ton of it apparently. 
+
+ -- Kent Baxley <kent.baxley@canonical.com>  Fri, 26 Oct 2012 17:01:57 -0500
+
 canonical-census (0.3.3) precise; urgency=low
 
   * Supply correct uri information in census tool (LP: 1065620).
