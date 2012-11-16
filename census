@@ -169,7 +169,7 @@ class State:
         map_dcd is a (regexp, name) list for mapping all DCDs matching regexp
         to a meta-channel "name".
         '''
-        census_re = re.compile('(\d+\.\d+\.\d+\.\d+)[\s-]+\[(.+?) [-+]\d{4}\] "GET .*/submit\?([^\s"]+).*?" [2,3]\d\d .*[wW]get')
+        census_re = re.compile('(\d+\.\d+\.\d+\.\d+)[\s\S]+\[(.+?) [-+]\d{4}\] "GET .*/submit\?([^\s"]+).*?" [2,3]\d\d .*[wW]get')
 
         cur = self.db.cursor()
         cur.execute('SELECT timestamp FROM last_update')
