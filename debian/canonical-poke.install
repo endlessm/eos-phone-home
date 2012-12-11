@@ -1,0 +1,2 @@
+send-poke /etc/cron.daily
+debian/46disable_poke /usr/share/initramfs-tools/scripts/casper-bottom

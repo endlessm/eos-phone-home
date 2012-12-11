@@ -1,12 +1,12 @@
-Source: canonical-census
+Source: canonical-poke
 Section: admin
 Priority: extra
-Maintainer: Martin Pitt <martin.pitt@canonical.com>
+Maintainer: Kent Baxley <kent.baxley@canonical.com>
 Build-Depends: debhelper (>= 7)
-Standards-Version: 3.9.0
+Standards-Version: 3.9.3
 Vcs-Bzr: https://code.launchpad.net/~install-census-developers/install-census/trunk
 
-Package: canonical-census
+Package: canonical-poke
 Architecture: all
 Depends: cron, wget, ${misc:Depends}
 Description: send "I am alive" ping to Canonical

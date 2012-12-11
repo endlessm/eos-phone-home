@@ -1,8 +1,9 @@
-Name: canonical-census
+Name: canonical-poke
 Maintainer: Martin Pitt <martin.pitt@canonical.com>
+Maintainer: Kent Baxley <kent.baxley@canonical.com>
 
 Files: *
-Copyright: (C) 2010 Canonical Ltd.
+Copyright: (C) 2012 Canonical Ltd.
 License: GPL-2+
  This program is free software; you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by
