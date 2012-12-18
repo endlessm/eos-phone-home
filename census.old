@@ -25,7 +25,6 @@ import subprocess
 import tempfile
 import gzip
 import GeoIP
-import csv
 
 # highest plausible counter; we assume that each computer sends at most 3 pings
 # a day (which is a lot for cron.daily), every day since the start of the
@@ -170,7 +169,7 @@ class State:
         map_dcd is a (regexp, name) list for mapping all DCDs matching regexp
         to a meta-channel "name".
         '''
-        census_re = re.compile('([\S][\S])[\s\S]+\[(.+?) [-+]\d{4}\] "GET .*/submit\?([^\s"]+).*?"')
+        census_re = re.compile('(\d+\.\d+\.\d+\.\d+)[\s\S]+\[(.+?) [-+]\d{4}\] "GET .*/submit\?([^\s"]+).*?" [2,3]\d\d .*[wW]get')
 
         cur = self.db.cursor()
         cur.execute('SELECT timestamp FROM last_update')
@@ -190,9 +189,6 @@ class State:
             m = census_re.match(line)
             if not m:
                 continue
-            print m.group(1)
-            print m.group(2)
-            print m.group(3)
             timestamp = time.mktime(time.strptime(m.group(2), '%d/%b/%Y:%H:%M:%S'))
             if after and timestamp < after:
                 #print 'ignoring too early date', line
@@ -222,7 +218,7 @@ class State:
                 continue
 
             if count < 0 or count > max_counter:
-                #print 'ERROR! Ignoring invalid counter:', line 
+                print 'ERROR! Ignoring invalid counter:', line 
                 continue
 
             if 'product' in args:
@@ -234,7 +230,7 @@ class State:
                 channels.append('%s %s' % (dcd, args['vendor'][0]))
             
             # try to resolve country
-            country = m.group(1)
+            country = geoip.country_code_by_addr(m.group(1))
             if country:
                 channels.append('%s %s' % (dcd, country))
                 
@@ -271,22 +267,6 @@ class State:
                     (ch,))
             for (date, day, count) in cur:
                 print '%s: %4i updates sent, %4i machines total' % (date, day, count)
-
-    def csv(self):
-        cur = self.db.cursor()
-        cur.execute('SELECT DISTINCT channel FROM history')
-        channels = [x[0] for x in cur.fetchall()]
-        with open('census-data.csv', 'wb') as f:
-            writer = csv.writer(f)
-            writer.writerow(['date', 'check-ins', 'number-of-machines', 'channel'])
-            
-        for ch in channels:
-            cur.execute('SELECT date, day, count, channel FROM history WHERE channel = ? ORDER BY date', (ch,))
-            with open('census-data.csv', 'ab') as f:
-                writer = csv.writer(f)
-                writer.writerows(cur)
-        f.close()
-
 
     def plot(self, directory, daily_pings=False):
         '''Generate gnuplot charts.
@@ -399,9 +379,6 @@ def parse_args():
             help='Generate graphs to given output directory')
     parser.add_option('--daily', action='store_true', default=False, 
             help='Show number of received daily updates on plots')
-    parser.add_option('--csv', action='store_true',
-            help='Dump current history into a csv file')
-
 
     (opts, args) = parser.parse_args()
 
@@ -455,9 +432,6 @@ def main():
 
     if opts.gnuplot:
         state.plot(opts.gnuplot, opts.daily)
-    if opts.csv:
-        state.csv()
-
 
 if __name__ == '__main__':
     main()
