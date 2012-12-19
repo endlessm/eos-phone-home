@@ -24,7 +24,7 @@ census_re = re.compile('(\d+\.\d+\.\d+\.\d+)[\s\S]+\[(.+?) [-+]\d{4}\] "GET .*/s
 geoip = GeoIP.new(GeoIP.GEOIP_MEMORY_CACHE)
 
 # This where we'll look for apache logs
-logdir='/var/log/apache2'
+logdir='/var/log/squid3'
 
 ### Set up start and end date ###
 
@@ -39,7 +39,7 @@ try:
     start_date = datetime.strptime( start_date, d_format)
     print str(start_date)
 except:
-   d = open('/var/log/apache2/access.log', 'rb')
+   d = open('/var/log/squid3/poke.canonical.com-access.log.1', 'rb')
    c = d.readlines()
    d.close()
    start_date = getdate(c[0])
@@ -50,12 +50,12 @@ except:
 end_date = strftime(d_format, gmtime())
 end_date = datetime.strptime( end_date, d_format)
 
-#### Parse all of the Apache Logs ####
+#### Parse the Squid Logs ####
 
 for logfile in os.listdir(logdir):
     filepath = os.path.join(logdir, logfile)
     # examine all apache access logs
-    if re.match(r'access.log', logfile):
+    if re.match(r'poke.canonical.com-access.log.1', logfile):
         print logfile
         # unzip any gzipped apache logs
         if logfile.endswith('.gz'):
