@@ -12,7 +12,7 @@ set -e
 
 COUNTFILE=/var/lib/send-install-count/counter
 DCD=/var/lib/ubuntu_dist_channel
-SCRIPT=http://census.canonical.com/submit
+SCRIPT=http://poke.canonical.com/submit
 
 [ -e $DCD ] || exit 0
 

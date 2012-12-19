@@ -1,3 +1,9 @@
+canonical-poke (0.3.6) precise; urgency=low
+
+  * change "SCRIPT" line in send-poke to http://poke.canonical.com (LP: #1091935)
+
+ -- Kent Baxley <kent.baxley@canonical.com>  Wed, 19 Dec 2012 13:53:14 -0600
+
 canonical-poke (0.3.5) precise; urgency=low
 
   * rename to canonical-poke (LP: #1088839)
