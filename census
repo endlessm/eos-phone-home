@@ -201,7 +201,7 @@ class State:
             if timestamp < last_update:
                 #print 'ignoring previously seen line', line
                 continue
-            last_update = max(timestamp, last_update)
+            last_update = min(timestamp, last_update)
 
             channels = []
             args = urlparse.parse_qs(m.group(3))
