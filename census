@@ -201,7 +201,7 @@ class State:
             if timestamp < last_update:
                 #print 'ignoring previously seen line', line
                 continue
-            last_update = min(timestamp, last_update)
+            last_update = max(timestamp, last_update)
 
             channels = []
             args = urlparse.parse_qs(m.group(3))
@@ -447,8 +447,20 @@ def main():
     state = State(opts.database)
 
     if opts.log:
+        fnames = []
         for f in args:
-            state.update_from_log(f, opts.map_dcd, opts.after)
+            fnames.append(f)
+
+        lines = list(fileinput.input(fnames))
+        t_fmt = '%d/%b/%Y:%H:%M:%S'
+        t_pat = re.compile('([\S][\S])[\s\S]+\[(.+?) [-+]\d{4}\] "GET .*/submit\?([^\s"]+).*?"')
+        outFile = open('combined.log', 'w')
+        for l in sorted(lines, key=lambda l: time.strptime(t_pat.search(l).group(2), t_fmt)):
+           # outFile = open('combined.log', 'a')
+            outFile.write(l,)
+        outFile.close()
+        state.update_from_log('combined.log', opts.map_dcd, opts.after)
+
 
     if opts.text:
         state.dump()
