@@ -26,6 +26,7 @@ import tempfile
 import gzip
 import GeoIP
 import csv
+import fileinput
 
 # highest plausible counter; we assume that each computer sends at most 3 pings
 # a day (which is a lot for cron.daily), every day since the start of the
