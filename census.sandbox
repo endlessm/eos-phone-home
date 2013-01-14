@@ -1,0 +1,579 @@
+#!/usr/bin/python
+
+'''Evaluate apache logs from send-census.
+
+This maintains a local SQLite database for the historic data and the current
+state, and can produce text and chart outputs.
+'''
+
+__author__ = 'Matt Zimmerman <matt.zimmerman@canonical.com>, Martin Pitt <martin.pitt@canonical.com>'
+__copyright__ = '(C) 2010 Canonical Ltd.'
+__license__ = 'GPL v2 or later'
+
+import random
+import re
+import sys
+import time
+import datetime
+import os
+import os.path
+import urlparse
+import operator
+import optparse
+import sqlite3 as dbapi2
+import subprocess
+import tempfile
+import gzip
+import GeoIP
+import csv
+import fileinput
+
+# highest plausible counter; we assume that each computer sends at most 3 pings
+# a day (which is a lot for cron.daily), every day since the start of the
+# project
+max_counter = (datetime.date.today() - datetime.date(2010, 7, 25)).days * 3
+if max_counter < 100:
+    max_counter = 100
+
+class Counter:
+    def __init__(self):
+        self.counters = []
+
+    def add(self, generation):
+        need_counters = generation + 1 - len(self.counters)
+        self.counters += [0] * need_counters
+
+        if generation > 0 and self.counters[generation-1] > 0:
+            self.counters[generation-1] -= 1
+        self.counters[generation] += 1
+
+    def dump(self):
+        print "Generations: %d" % len(self.counters)
+        print "Histogram:"
+        for i in range(len(self.counters)):
+            if self.counters[i] > 0:
+                print "%d: %d" % (i, self.counters[i])
+
+    def count(self):
+        return reduce(operator.__add__, self.counters)
+
+class Simulator:
+    def __init__(self):
+        self.clients = []
+        self.counter = Counter()
+
+    def iterate(self, n=1):
+        for i in range(n):
+            for client in self.clients:
+                if client.test():
+                    self.counter.add(client.increment())
+
+    def test(self):
+        class TestClient:
+            def __init__(self):
+                self.generation = 0
+
+            def test(self): return True
+
+            def increment(self):
+                gen = self.generation
+                self.generation += 1
+                return gen
+
+        class RandomFailureClient(TestClient):
+            def __init__(self, error_rate):
+                """0 < error_rate <= 100"""
+
+                TestClient.__init__(self)
+                self.error_rate = error_rate
+
+            def test(self):
+                if random.randint(0,100) > self.error_rate:
+                    return True
+                return False
+
+        # add 50 clients which randomly fail from 0-50% of the time
+        self.clients.extend([RandomFailureClient(random.randint(0,50)) for i in range(50)])
+
+        # run for 100 iterations
+        self.iterate(100)
+
+        # add 20 clients which always succeed
+        self.clients.extend(TestClient() for i in range(20))
+
+        # run for 25 iterations
+        self.iterate(25)
+
+        # add 30 clients which were incrementing but not phoning home until now
+        stale_clients = [TestClient() for i in range(30)]
+        for iteration in range(30):
+            for client in stale_clients:
+                client.increment()
+        self.clients.extend(stale_clients)
+
+        # run for 25 iterations
+        self.iterate(25)
+
+        # add 30 clients which were randomly incrementing but not phoning home until now
+        stale_clients = [RandomFailureClient(random.randint(0,50)) for i in range(30)]
+        for iteration in range(30):
+            for client in stale_clients:
+                if client.test():
+                    client.increment()
+        self.clients.extend(stale_clients)
+
+        # run for 25 iterations
+        self.iterate(25)
+
+        self.counter.dump()
+        assert self.counter.count() == len(self.clients)
+
+class State:
+    '''State of the entire system'''
+
+    def __init__(self, dbpath):
+        '''Initialize state from a database
+        
+        If the db does not exist yet, it will be created.
+        '''
+        init = not os.path.exists(dbpath)
+        self.db = dbapi2.connect(dbpath)
+
+        if init:
+            cur = self.db.cursor()
+            cur.execute('''CREATE TABLE db_version (
+                version INT NOT NULL)''')
+
+            cur.execute('''CREATE TABLE last_update (
+                timestamp DOUBLE NOT NULL)''')
+
+            cur.execute('''CREATE TABLE counters (
+                channel CHAR(100) PRIMARY KEY,
+                counters TEXT)''')
+
+            cur.execute('''CREATE TABLE history (
+                channel CHAR(100),
+                date CHAR(12),
+                day INT NOT NULL,
+                count INT NOT NULL,
+                PRIMARY KEY (channel, date))''')
+
+            cur.execute('INSERT INTO db_version VALUES (0)')
+            cur.execute("INSERT INTO last_update VALUES (0.0)")
+
+            self.db.commit()
+
+    def update_from_log(self, path, map_dcd, after=None):
+        '''Update status from Apache log.
+        
+        This will only include items which are newer than the last timestamp.
+
+        map_dcd is a (regexp, name) list for mapping all DCDs matching regexp
+        to a meta-channel "name".
+        '''
+        census_re = re.compile('([\S][\S])[\s\S]+\[(.+?) [-+]\d{4}\] "GET .*/submit\?([^\s"]+).*?"')
+
+        cur = self.db.cursor()
+        cur.execute('SELECT timestamp FROM last_update')
+        last_update = cur.fetchone()[0]
+
+        channel_counters = self._counters_from_db()
+        stats = self._current_stats()
+
+        geoip = GeoIP.new(GeoIP.GEOIP_MEMORY_CACHE)
+
+        if path.endswith('.gz'):
+            f = gzip.open(path)
+        else:
+            f = open(path)
+
+        for line in f:
+            m = census_re.match(line)
+            if not m:
+                continue
+            #print m.group(1)
+            #print m.group(2)
+            print m.group(3)
+            timestamp = time.mktime(time.strptime(m.group(2), '%d/%b/%Y:%H:%M:%S'))
+            if after and timestamp < after:
+                #print 'ignoring too early date', line
+                continue
+
+            if timestamp < last_update:
+                print 'ignoring previously seen line', line
+                continue
+            last_update = max(timestamp, last_update)
+
+            channels = []
+            args = urlparse.parse_qs(m.group(3))
+            try:
+                dcd = args['dcd'][0]
+                assert len(dcd) > 0
+
+                # map DCD
+                for (r, name) in map_dcd:
+                    if r.match(dcd):
+                        dcd = name
+                        break
+
+                channels.append(dcd)
+                count = int(args['count'][0])
+            except (TypeError, ValueError, KeyError):
+                print 'ERROR! Invalid census query:', m.group(3)
+                continue
+
+            if count < 0 or count > max_counter:
+                #print 'ERROR! Ignoring invalid counter:', line 
+                continue
+           
+            if 'vendor' in args:
+                channels.append('%s' % (args['vendor'][0]))
+
+            if 'product' in args:
+                channels.append('%s %s' % (args['vendor'][0], args['product'][0]))
+            
+            # try to resolve country
+            country = m.group(1)
+            if country:
+                channels.append('%s' % country)
+                channels.append('%s %s' % (dcd, country))
+                channels.append('%s %s' % (args['vendor'][0], country))
+                channels.append('%s %s %s' % (args['vendor'][0], args['product'][0], country))
+                  
+            #print 'timestamp: %f (%s), channels: %s, count: %i' % (timestamp, m.group(2), str(channels), count)
+
+            date = time.strftime('%Y-%m-%d', time.localtime(timestamp))
+
+            for c in channels:
+                channel_counters.setdefault(c, Counter()).add(count)
+                st = stats.setdefault(c, {}).setdefault(date, [0,0])
+                st[0] += 1
+                st[1] = channel_counters[c].count()
+
+        cur.execute('DELETE FROM last_update')
+        cur.execute('INSERT INTO last_update VALUES (?)', (last_update+.1,))
+        self._counters_to_db(channel_counters)
+        self._set_current_stats(stats)
+        self.db.commit()
+
+    def dump(self):
+        #print '====== COUNTERS ========'
+        #for channel, counter in self._counters_from_db().iteritems():
+        #    print '---- %s ---' % channel
+        #    print 'machines:', counter.count()
+        #    print 'hist:', counter.counters
+
+        cur = self.db.cursor()
+        cur.execute('SELECT DISTINCT channel FROM history')
+        channels = [x[0] for x in cur.fetchall()]
+        print channels
+        #print '====== HISTORY ========'
+        for ch in channels:
+            print '---- channel: %s -----' % ch
+            cur.execute('SELECT date, day, count FROM history WHERE channel = ? ORDER BY date', 
+                    (ch,))
+            for (date, day, count) in cur:
+                print '%s: %4i updates sent, %4i machines total' % (date, day, count)
+
+    def csv(self):
+        cur = self.db.cursor()
+        cur.execute('SELECT DISTINCT channel FROM history')
+        channels = [x[0] for x in cur.fetchall()]
+        with open('census-data.csv', 'wb') as f:
+            writer = csv.writer(f)
+            writer.writerow(['date', 'check-ins', 'number-of-machines', 'channel'])
+            
+        for ch in channels:
+            cur.execute('SELECT date, day, count, channel FROM history WHERE channel = ? ORDER BY date', (ch,))
+            with open('census-data.csv', 'ab') as f:
+                writer = csv.writer(f)
+                writer.writerows(cur)
+        f.close()
+    
+    def csv_country(self):
+        cur = self.db.cursor()
+        cur.execute('SELECT DISTINCT channel FROM history')
+        channels = [x[0] for x in cur.fetchall()]
+        channels_re = re.compile('([A-Z][A-Z])')
+        with open('census-geo-data.csv', 'wb') as f:
+            writer = csv.writer(f)
+            writer.writerow(['date', 'geo', 'check-ins', 'number-of-machines'])
+        for ch in channels:
+            m = channels_re.match(ch)
+            if not m:
+                continue
+            print m.group(1)
+            cur.execute('SELECT date, channel, day, count FROM history WHERE channel = ? ORDER BY date', (m.group(1),))
+            with open ('census-geo-data.csv', 'ab') as f:
+                writer = csv.writer(f)
+                writer.writerows(cur)
+        f.close()
+
+    def csv_image(self):
+        cur = self.db.cursor()
+        cur.execute('SELECT DISTINCT channel FROM history')
+        channels = [x[0] for x in cur.fetchall()]
+        channels_re = re.compile('([a-z0-9-]+)')
+        with open('census-image-data.csv', 'wb') as f:
+            writer = csv.writer(f)
+            writer.writerow(['date', 'image', 'check-ins', 'number-of-machines'])
+        for ch in channels:
+            m = channels_re.match(ch)
+            if not m:
+                continue
+            print m.group(1)
+            cur.execute('SELECT date, channel, day, count FROM history WHERE channel = ? ORDER BY date', (m.group(1),))
+            with open ('census-image-data.csv', 'ab') as f:
+                writer = csv.writer(f)
+                writer.writerows(cur)
+        f.close()
+   
+    def csv_image_geo(self):
+        cur = self.db.cursor()
+        cur.execute('SELECT DISTINCT channel FROM history')
+        channels = [x[0] for x in cur.fetchall()]
+        channels_re = re.compile('([a-z0-9-]+) ([A-Z][A-Z])')
+        with open('census-image-geo-data.csv', 'wb') as f:
+            writer = csv.writer(f)
+            writer.writerow(['date', 'image and geo', 'check-ins', 'number-of-machines'])
+        for ch in channels:
+            m = channels_re.match(ch)
+            if not m:
+                continue
+            print m.group(1), m.group(2)
+            query = m.group(1) + " " + m.group(2)
+            cur.execute('SELECT date, channel, day, count FROM history WHERE channel = ? ORDER BY date', (query,))
+            with open ('census-image-geo-data.csv', 'ab') as f:
+                writer = csv.writer(f)
+                writer.writerows(cur)
+        f.close()
+
+
+
+    def csv_make(self):
+        cur = self.db.cursor()
+        cur.execute('SELECT DISTINCT channel FROM history')
+        channels = [x[0] for x in cur.fetchall()]
+        channels_re = re.compile('([A-Za-z-.]+)')
+        with open('census-make-data.csv', 'wb') as f:
+            writer = csv.writer(f)
+            writer.writerow(['date', 'manufacturer', 'check-ins', 'number-of-machines'])
+        for ch in channels:
+            m = channels_re.match(ch)
+            if not m: 
+                continue
+            print m.group(1)
+            cur.execute('SELECT date, channel, day, count FROM history WHERE channel = ? ORDER BY date', (m.group(1),))
+            with open ('census-make-data.csv', 'ab') as f:
+                writer = csv.writer(f)
+                writer.writerows(cur)
+        f.close()
+
+
+
+
+    def plot(self, directory, daily_pings=False):
+        '''Generate gnuplot charts.
+
+        This will create <channel>.png files in given output directory.
+        If daily_pings is True, draw bars with the number of received pings on
+        every day; this is not a very meaningful number, and thus is disabled
+        by default.
+        '''
+        cur = self.db.cursor()
+        cur.execute('SELECT DISTINCT channel FROM history')
+        channels = [x[0] for x in cur.fetchall()]
+
+        for ch in channels:
+            gnuplot = subprocess.Popen(['gnuplot'], stdin=subprocess.PIPE)
+            print >> gnuplot.stdin, '''set xdata time
+set timefmt "%Y-%m-%d"
+set terminal png
+'''
+            f = tempfile.NamedTemporaryFile()
+            cur.execute('SELECT date, day, count FROM history WHERE channel = ? ORDER BY date', 
+                    (ch,))
+            for (date, day, count) in cur:
+                print >> f, '%s\t%i\t%i' % (date, day, count)
+
+            f.flush()
+
+            print >> gnuplot.stdin, 'set out "%s.png"\nset title "%s"' % (
+                    os.path.join(directory, ch), ch)
+            print >> gnuplot.stdin, 'set yrange [0:]\nset xtics rotate'
+
+            if daily_pings:
+                cmd = 'plot "%s" using 1:3 title "#machines" with lines lw 3 lt 1 , \
+                  "%s" using 1:2 title "#updates on that day" with impulses lw 2 lt 3' % (f.name, f.name)
+            else:
+                cmd = 'plot "%s" using 1:3 title "" with line lw 3 lt 1' % f.name
+            print >> gnuplot.stdin, cmd
+
+            print >> gnuplot.stdin, 'exit'
+            assert gnuplot.wait() == 0, 'gnuplot failed with %i' % gnuplot.returncode
+
+    def _counters_from_db(self):
+        '''Return a channel->Counter map from DB.'''
+
+        counters = {}
+        cur = self.db.cursor()
+        cur.execute('SELECT * FROM counters')
+        for channel, counter_str in cur:
+            counters[channel] = Counter()
+            counters[channel].counters = eval(counter_str, {}, {})
+
+        return counters
+
+    def _counters_to_db(self, map):
+        '''Write channel->Counter map to DB.'''
+
+        cur = self.db.cursor()
+        cur.execute('DELETE FROM counters')
+        for (channel, counters) in map.iteritems():
+            cur.execute('INSERT INTO counters VALUES (?, ?)', (channel,
+                    repr(counters.counters)))
+
+    def _current_stats(self):
+        '''Get most recent per-day/counter stats.
+
+        Return channel->date->[day, count] map.
+        '''
+        cur = self.db.cursor()
+        cur.execute('SELECT timestamp FROM last_update')
+        last_update = time.strftime('%Y-%m-%d',
+                time.localtime(float(cur.fetchone()[0])))
+
+        map = {}
+        cur.execute('SELECT channel, day, count FROM history WHERE date = ?',
+                (last_update,))
+        for (channel, day, count) in cur:
+            map.setdefault(channel, {})[last_update] = [day, count]
+
+        return map
+
+    def _set_current_stats(self, stats):
+        '''Set most recent per-day/counter stats.'''
+
+        cur = self.db.cursor()
+        for channel, per_date in stats.iteritems():
+            for date, (day, count) in per_date.iteritems():
+                cur.execute('INSERT OR REPLACE INTO history VALUES (?, ?, ?, ?)',
+                        (channel, date, day, count))
+
+def parse_args():
+    '''Parse command line args.
+
+    Return (options, args) tuple.
+    '''
+
+    parser = optparse.OptionParser(usage='\n  %prog [options]\n  %prog [options] -l logfile [logfile ..]')
+    parser.add_option('-t', '--test', action='store_true',
+            help='Run simulator for testing the algorithm')
+    parser.add_option('-d', '--database', metavar='PATH',
+            help='Path to database')
+    parser.add_option('--text', action='store_true',
+            help='Dump current history to stdout.')
+    parser.add_option('-l', '--log', action='store_true',
+            help='Update data with Apache log file(s).')
+    parser.add_option('--after', metavar='YYYY-MM-DD',
+            help='Only consider updates after given date')
+    parser.add_option('--map-dcd', action='append', metavar='name:REGEXP',
+            default=[], help='Map all distribution channel descriptors matching REGEXP to a meta-channel "name"')
+    parser.add_option('-g', '--gnuplot', metavar='DIR', action='store',
+            help='Generate graphs to given output directory')
+    parser.add_option('--daily', action='store_true', default=False, 
+            help='Show number of received daily updates on plots')
+    parser.add_option('--csv', action='store_true',
+            help='Dump entire current history into a csv file')
+    parser.add_option('--csv_geo', action='store_true', 
+            help='Dump number of check-ins per geo into a csv file')
+    parser.add_option('--csv_image', action='store_true',
+            help='Dump number of check-ins per OEM image into a csv file')
+    parser.add_option('--csv_image_geo', action='store_true',
+            help='Dump number of check-ins per OEM image and geo into a csv file')
+    parser.add_option('--csv_make', action='store_true',
+            help='Dump number of check-ins per Manufacturer into a csv file')
+   
+
+    (opts, args) = parser.parse_args()
+
+    if not opts.test:
+        if not opts.database:
+            parser.error('ERROR: You need to specify a database with --database.  See --help')
+
+    if opts.log:
+        if len(args) == 0:
+            parser.error('ERROR: You need to specify at least one log file. See --help')
+
+    if opts.after:
+        try:
+            opts.after = time.mktime(time.strptime(opts.after, '%Y-%m-%d'))
+        except ValueError:
+            parser.error('ERROR: Invalid --after date')
+
+    # turn --map-channel into a (regexp, name) list
+    map_dcd = []
+    for arg in opts.map_dcd:
+        try:
+            name, regexp = arg.split(':', 1)
+            assert len(name) > 0
+        except (AssertionError, ValueError):
+            parser.error('ERROR: --map-channel argument must be "name:REGEXP"')
+        try:
+            regexp = re.compile(regexp)
+        except Exception, e:
+            parser.error('ERROR: Invalid regular expression in --map-channel: %s' %
+                    str(e))
+        map_dcd.append((regexp, name))
+    opts.map_dcd = map_dcd
+
+    return (opts, args)
+
+def main():
+    (opts, args) = parse_args()
+
+    if opts.test:
+        Simulator().test()
+        sys.exit(0)
+
+    state = State(opts.database)
+
+    if opts.log:
+        fnames = []
+        for f in args:
+            fnames.append(f)
+
+        lines = list(fileinput.input(fnames))
+        t_fmt = '%d/%b/%Y:%H:%M:%S'
+        t_pat = re.compile('([\S][\S])[\s\S]+\[(.+?) [-+]\d{4}\] "GET .*/submit\?([^\s"]+).*?"')
+        outFile = open('combined.log', 'w')
+        for l in sorted(lines, key=lambda l: time.strptime(t_pat.search(l).group(2), t_fmt)):
+           # outFile = open('combined.log', 'a')
+            outFile.write(l,)
+        outFile.close()
+        state.update_from_log('combined.log', opts.map_dcd, opts.after)
+
+
+    if opts.text:
+        state.dump()
+
+    if opts.gnuplot:
+        state.plot(opts.gnuplot, opts.daily)
+    
+    if opts.csv:
+        state.csv()
+    
+    if opts.csv_geo:
+        state.csv_country()
+
+    if opts.csv_image:
+        state.csv_image()
+
+    if opts.csv_image_geo:
+        state.csv_image_geo()
+    
+    if opts.csv_make:
+        state.csv_make()
+
+if __name__ == '__main__':
+    main()
