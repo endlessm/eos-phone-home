@@ -266,7 +266,6 @@ class State:
         cur = self.db.cursor()
         cur.execute('SELECT DISTINCT channel FROM history')
         channels = [x[0] for x in cur.fetchall()]
-        print channels
         #print '====== HISTORY ========'
         for ch in channels:
             print '---- channel: %s -----' % ch
@@ -275,98 +274,164 @@ class State:
             for (date, day, count) in cur:
                 print '%s: %4i updates sent, %4i machines total' % (date, day, count)
 
-    def csv(self):
+    def csv(self, start=None, end=None):
         cur = self.db.cursor()
         cur.execute('SELECT DISTINCT channel FROM history')
         channels = [x[0] for x in cur.fetchall()]
-        with open('census-data.csv', 'wb') as f:
-            writer = csv.writer(f)
-            writer.writerow(['date', 'check-ins', 'number-of-machines', 'channel'])
-            
-        for ch in channels:
-            cur.execute('SELECT date, day, count, channel FROM history WHERE channel = ? ORDER BY date', (ch,))
-            with open('census-data.csv', 'ab') as f:
+        if start and end:
+            filename = 'census-data-%s-%s.csv' % (start,end)
+            with open(filename, 'wb') as f:
                 writer = csv.writer(f)
-                writer.writerows(cur)
-        f.close()
+                writer.writerow(['Stats for all channels from %s to %s' % (start,end)])
+                writer.writerow(['check-ins', 'number-of-machines', 'channel'])
+            
+            for ch in channels:
+                cur.execute('SELECT sum(day), sum(count), channel FROM history WHERE date BETWEEN ? and ? and channel = ?', (start, end, ch,))
+                with open(filename, 'ab') as f:
+                    writer = csv.writer(f)
+                    writer.writerows(cur)
+            f.close()
+        else:
+            with open('census-data.csv', 'wb') as f:
+                writer = csv.writer(f)
+                writer.writerow(['date', 'check-ins', 'number-of-machines', 'channel'])
+
+            for ch in channels:
+                cur.execute('SELECT date, day, count, channel FROM history WHERE channel = ? ORDER BY date', (ch,))
+                with open('census-data.csv', 'ab') as f:
+                    writer = csv.writer(f)
+                    writer.writerows(cur)
+            f.close()
     
-    def csv_country(self):
+    def csv_country(self, start=None, end=None):
         cur = self.db.cursor()
         cur.execute('SELECT DISTINCT channel FROM history')
         channels = [x[0] for x in cur.fetchall()]
         channels_re = re.compile('([A-Z][A-Z])')
-        with open('census-geo-data.csv', 'wb') as f:
-            writer = csv.writer(f)
-            writer.writerow(['date', 'geo', 'check-ins', 'number-of-machines'])
-        for ch in channels:
-            m = channels_re.match(ch)
-            if not m:
-                continue
-            print m.group(1)
-            cur.execute('SELECT date, channel, day, count FROM history WHERE channel = ? ORDER BY date', (m.group(1),))
-            with open ('census-geo-data.csv', 'ab') as f:
+        if start and end:
+            filename = 'census-geo-data-%s-%s.csv' % (start,end)
+            with open(filename, 'wb') as f:
                 writer = csv.writer(f)
-                writer.writerows(cur)
-        f.close()
+                writer.writerow(['Geo Statistics from %s to %s' % (start,end)])
+                writer.writerow(['check-ins', 'number-of-machines', 'GEO'])
 
-    def csv_image(self):
-        cur = self.db.cursor()
-        cur.execute('SELECT DISTINCT channel FROM history')
-        channels = [x[0] for x in cur.fetchall()]
-        channels_re = re.compile('([a-z0-9-]+)')
-        with open('census-image-data.csv', 'wb') as f:
-            writer = csv.writer(f)
-            writer.writerow(['date', 'image', 'check-ins', 'number-of-machines'])
-        for ch in channels:
-            m = channels_re.match(ch)
-            if not m:
-                continue
-            print m.group(1)
-            cur.execute('SELECT date, channel, day, count FROM history WHERE channel = ? ORDER BY date', (m.group(1),))
-            with open ('census-image-data.csv', 'ab') as f:
+            for ch in channels:
+                m = channels_re.match(ch)
+                if not m:
+                    continue
+                print m.group(1)
+                print start
+                print end
+                cur.execute('SELECT sum(day), sum(count), channel FROM history WHERE date BETWEEN ? and ? and CHANNEL = ?', (start, end, m.group(1),))
+                with open (filename, 'ab') as f:
+                    writer = csv.writer(f)
+                    writer.writerows(cur)
+            f.close()
+        else:
+            with open('census-geo-data.csv', 'wb') as f:
                 writer = csv.writer(f)
-                writer.writerows(cur)
-        f.close()
+                writer.writerow(['date', 'GEO', 'check-ins', 'number-of-machines'])
+
+            for ch in channels:
+                m = channels_re.match(ch)
+                if not m:
+                    continue
+                print m.group(1), m.group(2)
+                cur.execute('SELECT date, channel, day, count FROM history WHERE channel = ? ORDER BY date', (m.group(1),))
+                with open ('census-geo-data.csv', 'ab') as f:
+                    writer = csv.writer(f)
+                    writer.writerows(cur)
+            f.close()
+
+    def csv_image(self, start=None, end=None):
+        cur = self.db.cursor()
+        cur.execute('SELECT DISTINCT channel FROM history ORDER BY channel')
+        channels = [x[0] for x in cur.fetchall()]
+        print channels
+        channels_re = re.compile('([a-z0-9-]+)(?:[\s][A-Z][A-Z])')
+
+        if start and end:
+            filename = 'census-image-data-%s-%s.csv' % (start,end)
+            with open(filename, 'wb') as f:
+                writer = csv.writer(f)
+                writer.writerow(['OS Image Statistics from %s to %s' % (start,end)]) 
+                writer.writerow(['check-ins', 'number-of-machines', 'image'])
+            for index, ch in channels:
+                m = channels_re.match(ch)
+                if not m:
+                    continue
+                print m.group(1)
+                
+                cur.execute('SELECT sum(day), sum(count), channel FROM history WHERE date BETWEEN ? and ? and channel = ?', (start, end, m.group(1),))
+                with open (filename, 'ab') as f:
+                    writer = csv.writer(f)
+                    writer.writerows(cur)
+            f.close()
+	else:
+            with open('census-image-data.csv', 'wb') as f:
+                writer = csv.writer(f)
+                writer.writerow(['date', 'image', 'check-ins', 'number-of-machines'])
+
+            for ch in channels:
+                m = channels_re.match(ch)
+                if not m:
+                    continue
+                print m.group(1)
+                cur.execute('SELECT date, channel, day, count FROM history WHERE channel = ? ORDER BY date', (m.group(1),))
+                with open ('census-image-data.csv', 'ab') as f:
+                    writer = csv.writer(f)
+                    writer.writerows(cur)
+            f.close()
+
    
-    def csv_image_geo(self):
+    def csv_image_geo(self, start=None, end=None):
         cur = self.db.cursor()
         cur.execute('SELECT DISTINCT channel FROM history')
         channels = [x[0] for x in cur.fetchall()]
         channels_re = re.compile('([a-z0-9-]+) ([A-Z][A-Z])')
-        with open('census-image-geo-data.csv', 'wb') as f:
-            writer = csv.writer(f)
-            writer.writerow(['date', 'image and geo', 'check-ins', 'number-of-machines'])
-        for ch in channels:
-            m = channels_re.match(ch)
-            if not m:
-                continue
-            print m.group(1), m.group(2)
-            query = m.group(1) + " " + m.group(2)
-            cur.execute('SELECT date, channel, day, count FROM history WHERE channel = ? ORDER BY date', (query,))
-            with open ('census-image-geo-data.csv', 'ab') as f:
+        if start and end:
+            filename = 'census-image-geo-data-%s-%s.csv' % (start,end)
+            with open(filename, 'wb') as f:
                 writer = csv.writer(f)
-                writer.writerows(cur)
-        f.close()
+                writer.writerow(['Image Statistics by Country from %s to %s' % (start,end)])
+                writer.writerow(['check-ins', 'number-of-machines', 'image and geo'])
+            for ch in channels:
+                m = channels_re.match(ch)
+                if not m:
+                    continue
+                print m.group(1), m.group(2)
+                query = m.group(1) + " " + m.group(2)
+                cur.execute('SELECT sum(day), sum(count), channel FROM history WHERE date between ? and ? and channel = ?', (start, end, query,))
+                with open (filename, 'ab') as f:
+                    writer = csv.writer(f)
+                    writer.writerows(cur)
+            f.close()
+        else:
+            with open('census-image-geo-data.csv', 'wb') as f:
+                writer = csv.writer(f)
+                writer.writerow(['date', 'image and geo', 'check-ins', 'number-of-machines'])
+            for ch in channels:
+                m = channels_re.match(ch)
+                if not m:
+                    continue
+                print m.group(1), m.group(2)
+                query = m.group(1) + " " + m.group(2)
+                cur.execute('SELECT date, channel, day, count FROM history WHERE channel = ? ORDER BY date', (query,))
+                with open ('census-image-geo-data.csv', 'ab') as f:
+                    writer = csv.writer(f)
+                    writer.writerows(cur)
+            f.close()
 
 
 
-    def csv_make(self):
+
+    def csv_make(self, channels):
         cur = self.db.cursor()
-        cur.execute('SELECT DISTINCT channel FROM history')
-        channels = [x[0] for x in cur.fetchall()]
-        channels_re = re.compile('([A-Za-z-.]+)')
-        with open('census-make-data.csv', 'wb') as f:
+        print channels
+        cur.execute('SELECT date, channel, day, count FROM history WHERE channel = ? ORDER BY date', (channels,))
+        with open ('census-make-data.csv', 'ab') as f:
             writer = csv.writer(f)
-            writer.writerow(['date', 'manufacturer', 'check-ins', 'number-of-machines'])
-        for ch in channels:
-            m = channels_re.match(ch)
-            if not m: 
-                continue
-            print m.group(1)
-            cur.execute('SELECT date, channel, day, count FROM history WHERE channel = ? ORDER BY date', (m.group(1),))
-            with open ('census-make-data.csv', 'ab') as f:
-                writer = csv.writer(f)
-                writer.writerows(cur)
+            writer.writerows(cur)
         f.close()
 
 
@@ -493,7 +558,10 @@ def parse_args():
             help='Dump number of check-ins per OEM image and geo into a csv file')
     parser.add_option('--csv_make', action='store_true',
             help='Dump number of check-ins per Manufacturer into a csv file')
-   
+    parser.add_option('--start_date', metavar='YYYY-MM-DD',
+            help='Used with csv file generation to capture date ranges in YYYY-MM-DD format.')
+    parser.add_option('--end_date', metavar='YYYY-MM-DD',
+            help='Used with csv file generation to caputre date ranges in YYYY-MM-DD format.')
 
     (opts, args) = parser.parse_args()
 
@@ -504,14 +572,17 @@ def parse_args():
     if opts.log:
         if len(args) == 0:
             parser.error('ERROR: You need to specify at least one log file. See --help')
+ 
+    if opts.csv_make:
+        if len(args) == 0:
+            parser.error('ERROR: You need to specify at least one manufacturer.')
 
     if opts.after:
         try:
             opts.after = time.mktime(time.strptime(opts.after, '%Y-%m-%d'))
         except ValueError:
             parser.error('ERROR: Invalid --after date')
-
-    # turn --map-channel into a (regexp, name) list
+    
     map_dcd = []
     for arg in opts.map_dcd:
         try:
@@ -561,19 +632,23 @@ def main():
         state.plot(opts.gnuplot, opts.daily)
     
     if opts.csv:
-        state.csv()
+        state.csv(opts.start_date, opts.end_date)
     
     if opts.csv_geo:
-        state.csv_country()
+        state.csv_country(opts.start_date, opts.end_date)
 
     if opts.csv_image:
-        state.csv_image()
+        state.csv_image(opts.start_date, opts.end_date)
 
     if opts.csv_image_geo:
-        state.csv_image_geo()
+        state.csv_image_geo(opts.start_date, opts.end_date)
     
     if opts.csv_make:
-        state.csv_make()
-
+        with open('census-make-data.csv', 'wb') as f:
+            writer = csv.writer(f)
+            writer.writerow(['date', 'manufacturer', 'check-ins', 'number-of-machines'])
+        for make in args:
+          state.csv_make(make)
+        f.close()
 if __name__ == '__main__':
     main()
