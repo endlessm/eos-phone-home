@@ -356,7 +356,7 @@ class State:
                 writer = csv.writer(f)
                 writer.writerow(['OS Image Statistics from %s to %s' % (start,end)]) 
                 writer.writerow(['check-ins', 'number-of-machines', 'image'])
-            for index, ch in channels:
+            for ch in channels:
                 m = channels_re.match(ch)
                 if not m:
                     continue
