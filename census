@@ -187,7 +187,6 @@ class State:
         channel_counters = self._counters_from_db()
         stats = self._current_stats()
         channels = self._current_channels()
-
         geoip = GeoIP.new(GeoIP.GEOIP_MEMORY_CACHE)
 
         if path.endswith('.gz'):
@@ -401,8 +400,9 @@ set terminal png
         cur = self.db.cursor()
         cur.execute('SELECT channel_id, dcd, vendor, product, country FROM channel')
         for (channel_id, dcd, vendor, product, country) in cur:
-            channels[(dcd, vendor, product, country), channel_id]
-
+            channels.setdefault((dcd,vendor,product,country), channel_id)
+            #channels[(dcd, vendor, product, country), channel_id]
+            
         return channels
 
     def _set_current_channels(self, channels):
@@ -415,6 +415,7 @@ set terminal png
 
     def _next_channel_id(self, channels):
         '''Return a unique channel_id.'''
+        print channels.values()
         if len(channels.values()) > 0:
             return max(channels.values()) + 1
         else:
