@@ -235,7 +235,7 @@ class State:
             product = ""
             if 'product' in args:
                 product = args['product'][0]
-            
+
             vendor = ""
             if 'vendor' in args:
                 vendor = args['vendor'][0]
@@ -293,7 +293,7 @@ class State:
         cur = self.db.cursor()
         cur.execute('SELECT DISTINCT channel_id FROM history')
         channels = [x[0] for x in cur.fetchall()]
-        with open('census-data.csv', 'wb') as f:
+        with open('census-data-dump.csv', 'wb') as f:
             writer = csv.writer(f)
             writer.writerow(['date', 'check-ins', 'number-of-machines', 'channel_id', 'image', 'vendor', 'product', 'country'])
             
@@ -320,13 +320,139 @@ class State:
                 writer.writerow(['check-ins', 'number-of-machines', 'GEO'])
 
             for ch in channels:
-                cur.execute('SELECT sum(day), sum(count), country FROM channel NATURAL JOIN history WHERE date between ? and ? and country = ? ORDER BY date', (start, end, ch,))
+                cur.execute('SELECT sum(day), sum(count), country FROM channel NATURAL JOIN history WHERE date between ? and ? and country = ?', (start, end, ch,))
                 with open(filename, 'ab') as f:
                     writer = csv.writer(f)
                     writer.writerows(cur)
             f.close()
-   
 
+    def csv_image(self, start, end):
+        if start is None or end is None:
+            print "Error: You must supply a --start_date and --end_date"
+            sys.exit(1)
+        else:
+            cur = self.db.cursor()
+            cur.execute('SELECT DISTINCT dcd from channel')
+            channels = [x[0] for x in cur.fetchall()]
+            filename = 'census-by-image-%s-%s.csv' % (start, end)
+            with open(filename, 'wb') as f:
+                writer = csv.writer(f)
+                writer.writerow(['Check-ins for %s through %s' % (start, end)])
+                writer.writerow(['check-ins', 'number-of-machines', 'OEM Image Name'])
+      
+            for ch in channels:
+                cur.execute('SELECT sum(day), sum(count), dcd from channel NATURAL JOIN history WHERE date between ? and ? and dcd = ?', (start, end, ch,))
+                with open(filename, 'ab') as f:
+                    writer = csv.writer(f)
+                    writer.writerows(cur)
+            f.close()
+
+    def csv_image_geo(self, start, end):
+        if start is None or end is None:
+            print "Error: You must supply a --start_date and --end_date"
+            sys.exit(1)
+        else:
+            cur = self.db.cursor()
+            cur.execute('SELECT DISTINCT country, dcd from channel')
+            channels = [x[0:] for x in cur.fetchall()]
+            filename = 'census-by-image-and-geo-%s-%s.csv' % (start, end)
+            with open(filename, 'wb') as f:
+                writer = csv.writer(f)
+                writer.writerow(['Check-ins for %s through %s' % (start, end)])
+                writer.writerow(['check-ins', 'number-of-machines', 'OEM Image Name', 'GEO'])
+
+            for (ch, n) in channels:
+                cur.execute('SELECT sum(day), sum(count), dcd, country from channel NATURAL JOIN history WHERE date between ? and ? and country = ? and dcd = ?', (start, end, ch, n,))
+                with open(filename, 'ab') as f:
+                    writer = csv.writer(f)
+                    writer.writerows(cur)
+            f.close()
+
+    def csv_vendor(self, start, end):
+        if start is None or end is None:
+            print "Error: You must supply a --start_date and --end_date"
+            sys.exit(1)
+        else:
+            cur = self.db.cursor()
+            cur.execute('SELECT DISTINCT vendor from channel')
+            channels = [x[0] for x in cur.fetchall()]
+            filename = 'census-by-vendor-%s-%s.csv' % (start, end)
+            with open(filename, 'wb') as f:
+                writer = csv.writer(f)
+                writer.writerow(['Check-ins for %s through %s' % (start, end)])
+                writer.writerow(['check-ins', 'number-of-machines', 'Vendor Name'])
+
+            for ch in channels:
+                cur.execute('SELECT sum(day), sum(count), vendor from channel NATURAL JOIN history WHERE date between ? and ? and vendor = ?', (start, end, ch,))
+                with open(filename, 'ab') as f:
+                    writer = csv.writer(f)
+                    writer.writerows(cur)
+            f.close()
+
+    def csv_vendor_geo(self, start, end):
+        if start is None or end is None:
+            print "Error: You must supply a --start_date and --end_date"
+            sys.exit(1)
+        else:
+            cur = self.db.cursor()
+            cur.execute('SELECT DISTINCT country, vendor from channel')
+            channels = [x[0:] for x in cur.fetchall()]
+            filename = 'census-by-vendor-and-geo-%s-%s.csv' % (start, end)
+            with open(filename, 'wb') as f:
+                writer = csv.writer(f)
+                writer.writerow(['Check-ins for %s through %s' % (start, end)])
+                writer.writerow(['check-ins', 'number-of-machines', 'Vendor Name', 'GEO'])
+
+            for (ch, n) in channels:
+                cur.execute('SELECT sum(day), sum(count), vendor, country from channel NATURAL JOIN history WHERE date between ? and ? and country = ? and vendor = ?', (start, end, ch, n, ))
+                with open(filename, 'ab') as f:
+                    writer = csv.writer(f)
+                    writer.writerows(cur)
+            f.close()
+
+    
+    def csv_model(self, start, end):
+        if start is None or end is None:
+            print "Error: You must supply a --start_date and --end_date"
+            sys.exit(1)
+        else:
+            cur = self.db.cursor()
+            cur.execute('SELECT DISTINCT product from channel')
+            models = [x[0] for x in cur.fetchall()]
+            filename = 'census-by-model-%s-%s.csv' % (start, end)
+            with open(filename, 'wb') as f:
+                writer = csv.writer(f)
+                writer.writerow(['Check-ins for %s through %s' % (start, end)])
+                writer.writerow(['check-ins', 'number-of-machines', 'Vendor Name', 'Model Name'])
+
+            for m in models:
+                cur.execute('SELECT sum(day), sum(count), vendor, product from channel NATURAL JOIN history WHERE date between ? and ? and product = ?', (start, end, m,))
+                with open(filename, 'ab') as f:
+                    writer = csv.writer(f)
+                    writer.writerows(cur)
+            f.close()
+
+    def csv_model_geo(self, start, end):
+        if start is None or end is None:
+            print "Error: You must supply a --start_date and --end_date"
+            sys.exit(1)
+        else:
+            cur = self.db.cursor()
+            cur.execute('SELECT DISTINCT country, product from channel')
+            models = [x[0:] for x in cur.fetchall()]
+            filename = 'census-by-model-and-geo-%s-%s.csv' % (start, end)
+            with open(filename, 'wb') as f:
+                writer = csv.writer(f)
+                writer.writerow(['Check-ins for %s through %s' % (start, end)])
+                writer.writerow(['check-ins', 'number-of-machines', 'Vendor Name', 'Model Name', 'GEO'])
+
+            for (ch, m) in models:
+                cur.execute('SELECT sum(day), sum(count), vendor, product, country from channel NATURAL JOIN history WHERE date between ? and ? and country = ? and product = ?', (start, end, ch, m,))
+                with open(filename, 'ab') as f:
+                    writer = csv.writer(f)
+                    writer.writerows(cur)
+            f.close()
+  
     def plot(self, directory, daily_pings=False):
         '''Generate gnuplot charts.
 
@@ -479,12 +605,23 @@ def parse_args():
     parser.add_option('--end_date', metavar='YYYY-MM-DD',
             help='Used with csv file generation to capture date ranges in YYYY-MM-DD format')
     parser.add_option('--csv', action='store_true',
-            help='Dump current history into a csv file')
+            help='Dump entire database history into a csv file')
     parser.add_option('--csv_geo', action='store_true',
             help='Dump check-ins by country into a csv file for a given period. Requires --start_date and --end_date')
+    parser.add_option('--csv_image', action='store_true',
+            help='Dump check-ins by OEM image name into a csv file for a given period. Requires --start_date and --end_date')
+    parser.add_option('--csv_image_geo', action='store_true',
+            help='Dump check-ins by OEM image and geography into a csv file for a given period.  Requires --start_date and --end_date') 
+    parser.add_option('--csv_vendor', action='store_true',
+            help='Dump check-ins by manufacturer name into a csv file for a given period.  Requires --start_date and --end_date')
+    parser.add_option('--csv_vendor_geo', action='store_true',
+            help='Dump check-ins by manufacturer and geography into a csv file for a given period.  Requires --start_date and --end_date')
+    parser.add_option('--csv_model', action='store_true',
+            help='Dump check-ins by model name into a csv file for a given period.  Requires --start_date and --end_date')
+    parser.add_option('--csv_model_geo', action='store_true',
+            help='Dump check-ins by model name and geography into a csv file for a given period.  Requires --start_date and --end_date')
     
-
-
+   
     (opts, args) = parser.parse_args()
 
     if not opts.test:
@@ -549,11 +686,30 @@ def main():
 
     if opts.gnuplot:
         state.plot(opts.gnuplot, opts.daily)
+
     if opts.csv:
         state.csv()
+
     if opts.csv_geo:
         state.csv_geo(opts.start_date,opts.end_date)
 
+    if opts.csv_image:
+        state.csv_image(opts.start_date,opts.end_date)
+
+    if opts.csv_image_geo:
+        state.csv_image_geo(opts.start_date,opts.end_date)
+  
+    if opts.csv_vendor:
+        state.csv_vendor(opts.start_date, opts.end_date)
+    
+    if opts.csv_vendor_geo:
+        state.csv_vendor_geo(opts.start_date, opts.end_date)
+
+    if opts.csv_model:
+        state.csv_model(opts.start_date, opts.end_date)
+
+    if opts.csv_model_geo:
+        state.csv_model_geo(opts.start_date, opts.end_date)
 
 if __name__ == '__main__':
     main()
