@@ -305,8 +305,8 @@ class State:
                 writer.writerows(cur)
         f.close()
 
-    def csv_geo(self, start, end):
-        if start or end is None:
+    def csv_geo(self, start=None, end=None):
+        if start is None or end is None:
             print "Error: You must supply a --start_date and --end_date!"
             sys.exit(1)
         else:
