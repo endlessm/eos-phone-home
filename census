@@ -148,15 +148,22 @@ class State:
                 timestamp DOUBLE NOT NULL)''')
 
             cur.execute('''CREATE TABLE counters (
-                channel CHAR(100) PRIMARY KEY,
+                channel_id PRIMARY KEY,
                 counters TEXT)''')
 
             cur.execute('''CREATE TABLE history (
-                channel CHAR(100),
+                channel_id INT NOT NULL,
                 date CHAR(12),
                 day INT NOT NULL,
                 count INT NOT NULL,
-                PRIMARY KEY (channel, date))''')
+                PRIMARY KEY (channel_id, date))''')
+
+            cur.execute('''CREATE TABLE channel (
+                channel_id PRIMARY KEY,
+                dcd CHAR(100),
+                vendor CHAR(100),
+                product CHAR(100),
+                country CHAR(3))''')
 
             cur.execute('INSERT INTO db_version VALUES (0)')
             cur.execute("INSERT INTO last_update VALUES (0.0)")
@@ -179,7 +186,7 @@ class State:
 
         channel_counters = self._counters_from_db()
         stats = self._current_stats()
-
+        channels = self._current_channels()
         geoip = GeoIP.new(GeoIP.GEOIP_MEMORY_CACHE)
 
         if path.endswith('.gz'):
@@ -204,7 +211,7 @@ class State:
                 continue
             last_update = max(timestamp, last_update)
 
-            channels = []
+            channel_ids = []
             args = urlparse.parse_qs(m.group(3))
             try:
                 dcd = args['dcd'][0]
@@ -216,7 +223,6 @@ class State:
                         dcd = name
                         break
 
-                channels.append(dcd)
                 count = int(args['count'][0])
             except (TypeError, ValueError, KeyError):
                 print 'ERROR! Invalid census query:', m.group(3)
@@ -226,24 +232,30 @@ class State:
                 #print 'ERROR! Ignoring invalid counter:', line 
                 continue
 
+            product = ""
             if 'product' in args:
-                channels.append('%s %s' % (dcd, args['product'][0]))
+                product = args['product'][0]
             
-            #adding vendor information. we may want to change how we process this info later.
-
+            vendor = ""
             if 'vendor' in args:
-                channels.append('%s %s' % (dcd, args['vendor'][0]))
+                vendor = args['vendor'][0]
             
             # try to resolve country
             country = m.group(1)
-            if country:
-                channels.append('%s %s' % (dcd, country))
+            if not country:
+                country = ""
                 
+            # If channel exists, find it. If not, create a new one w/ new channel ID
+            channel = (dcd, vendor, product, country)
+            channel_id = self._get_channel_id(channels, channel)
+            channels[channel] = channel_id
+            channel_ids.append(channel_id)
+
             #print 'timestamp: %f (%s), channels: %s, count: %i' % (timestamp, m.group(2), str(channels), count)
 
             date = time.strftime('%Y-%m-%d', time.localtime(timestamp))
 
-            for c in channels:
+            for c in channel_ids:
                 channel_counters.setdefault(c, Counter()).add(count)
                 st = stats.setdefault(c, {}).setdefault(date, [0,0])
                 st[0] += 1
@@ -253,6 +265,7 @@ class State:
         cur.execute('INSERT INTO last_update VALUES (?)', (last_update+.1,))
         self._counters_to_db(channel_counters)
         self._set_current_stats(stats)
+        self._set_current_channels(channels)
         self.db.commit()
 
     def dump(self):
@@ -263,26 +276,27 @@ class State:
         #    print 'hist:', counter.counters
 
         cur = self.db.cursor()
-        cur.execute('SELECT DISTINCT channel FROM history')
+        cur.execute('SELECT DISTINCT channel_id FROM history')
         channels = [x[0] for x in cur.fetchall()]
         #print '====== HISTORY ========'
         for ch in channels:
-            print '---- channel: %s -----' % ch
-            cur.execute('SELECT date, day, count FROM history WHERE channel = ? ORDER BY date', 
+            print '---- channel id: %s -----' % ch
+            cur.execute('SELECT date, day, count FROM history WHERE channel_id = ? ORDER BY date', 
                     (ch,))
             for (date, day, count) in cur:
                 print '%s: %4i updates sent, %4i machines total' % (date, day, count)
 
     def csv(self):
         cur = self.db.cursor()
-        cur.execute('SELECT DISTINCT channel FROM history')
+        cur.execute('SELECT DISTINCT channel_id FROM history')
         channels = [x[0] for x in cur.fetchall()]
         with open('census-data.csv', 'wb') as f:
             writer = csv.writer(f)
-            writer.writerow(['date', 'check-ins', 'number-of-machines', 'channel'])
+            writer.writerow(['date', 'check-ins', 'number-of-machines', 'channel_id'])
             
         for ch in channels:
-            cur.execute('SELECT date, day, count, channel FROM history WHERE channel = ? ORDER BY date', (ch,))
+            # TODO: JOIN on channel table
+            cur.execute('SELECT date, day, count, channel_id FROM history WHERE channel_id = ? ORDER BY date', (ch,))
             with open('census-data.csv', 'ab') as f:
                 writer = csv.writer(f)
                 writer.writerows(cur)
@@ -298,7 +312,7 @@ class State:
         by default.
         '''
         cur = self.db.cursor()
-        cur.execute('SELECT DISTINCT channel FROM history')
+        cur.execute('SELECT DISTINCT channel_id FROM history')
         channels = [x[0] for x in cur.fetchall()]
 
         for ch in channels:
@@ -308,7 +322,8 @@ set timefmt "%Y-%m-%d"
 set terminal png
 '''
             f = tempfile.NamedTemporaryFile()
-            cur.execute('SELECT date, day, count FROM history WHERE channel = ? ORDER BY date', 
+            # TODO: JOIN on channel table
+            cur.execute('SELECT date, day, count FROM history WHERE channel_id = ? ORDER BY date', 
                     (ch,))
             for (date, day, count) in cur:
                 print >> f, '%s\t%i\t%i' % (date, day, count)
@@ -361,10 +376,10 @@ set terminal png
                 time.localtime(float(cur.fetchone()[0])))
 
         map = {}
-        cur.execute('SELECT channel, day, count FROM history WHERE date = ?',
+        cur.execute('SELECT channel_id, day, count FROM history WHERE date = ?',
                 (last_update,))
-        for (channel, day, count) in cur:
-            map.setdefault(channel, {})[last_update] = [day, count]
+        for (channel_id, day, count) in cur:
+            map.setdefault(channel_id, {})[last_update] = [day, count]
 
         return map
 
@@ -372,10 +387,45 @@ set terminal png
         '''Set most recent per-day/counter stats.'''
 
         cur = self.db.cursor()
-        for channel, per_date in stats.iteritems():
+        for channel_id, per_date in stats.iteritems():
             for date, (day, count) in per_date.iteritems():
                 cur.execute('INSERT OR REPLACE INTO history VALUES (?, ?, ?, ?)',
-                        (channel, date, day, count))
+                        (channel_id, date, day, count))
+
+    def _current_channels(self):
+        '''Get map of channel descriptions mapped to channel ID.
+
+        Return map of [dcd, vendor, product, country], channel_id'''
+        channels = {}
+        cur = self.db.cursor()
+        cur.execute('SELECT channel_id, dcd, vendor, product, country FROM channel')
+        for (channel_id, dcd, vendor, product, country) in cur:
+            channels.setdefault((dcd,vendor,product,country), channel_id)
+            
+        return channels
+
+    def _set_current_channels(self, channels):
+        '''Set channel descriptions.'''
+
+        cur = self.db.cursor()
+        for (dcd, vendor, product, country), channel_id in channels.iteritems():
+            cur.execute('INSERT OR REPLACE INTO channel VALUES (?, ?, ?, ?, ?)',
+                        (channel_id, dcd, vendor, product, country))
+
+    def _next_channel_id(self, channels):
+        '''Return a unique channel_id.'''
+        if len(channels.values()) > 0:
+            return max(channels.values()) + 1
+        else:
+            return 1
+
+    def _get_channel_id(self, channels, channel):
+        '''Return the channel ID of a channel. Assigns a new channel ID if necessary'''
+        if channel not in channels:
+            return self._next_channel_id(channels)
+        else:
+            return channels[channel]
+                
 
 def parse_args():
     '''Parse command line args.
