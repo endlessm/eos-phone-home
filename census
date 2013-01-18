@@ -319,7 +319,7 @@ class State:
 
     def csv_geo(self, start=None, end=None):
         sql = 'SELECT sum(day), sum(count), country FROM channel NATURAL JOIN history WHERE date BETWEEN ? AND ? GROUP BY country'
-        filename = 'census-by-image-%s-%s.csv'
+        filename = 'census-by-geo-%s-%s.csv'
         header = ['check-ins', 'number-of-machines', 'GEO']
         self.csv_generic(sql, filename, header, start, end)
 
