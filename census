@@ -378,16 +378,16 @@ set timefmt "%Y-%m-%d"
 set terminal png
 '''
             f = tempfile.NamedTemporaryFile()
-            # TODO: JOIN on channel table
-            cur.execute('SELECT date, day, count FROM history WHERE channel_id = ? ORDER BY date', 
+            cur.execute('SELECT date, day, count, dcd, vendor, product, country FROM history NATURAL JOIN channel WHERE channel_id = ? ORDER BY date', 
                     (ch,))
-            for (date, day, count) in cur:
-                print >> f, '%s\t%i\t%i' % (date, day, count)
+            for (date, day, count, dcd, vendor, product, country) in cur:
+                print >> f, '%s\t%i\t%i\t%s\t%s\t%s\t%s' % (date, day, count, dcd, vendor, product, country)
 
             f.flush()
-
+            
+            plotname = '%s-%s-%s-%s' % (dcd, vendor, product, country)
             print >> gnuplot.stdin, 'set out "%s.png"\nset title "%s"' % (
-                    os.path.join(directory, ch), ch)
+                    os.path.join(directory, plotname), plotname)
             print >> gnuplot.stdin, 'set yrange [0:]\nset xtics rotate'
 
             if daily_pings:
