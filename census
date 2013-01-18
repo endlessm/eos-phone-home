@@ -235,7 +235,7 @@ class State:
             product = ""
             if 'product' in args:
                 product = args['product'][0]
-            
+
             vendor = ""
             if 'vendor' in args:
                 vendor = args['vendor'][0]
@@ -278,31 +278,87 @@ class State:
         cur = self.db.cursor()
         cur.execute('SELECT DISTINCT channel_id FROM history')
         channels = [x[0] for x in cur.fetchall()]
-        #print '====== HISTORY ========'
+        print '====== HISTORY ========'
         for ch in channels:
             print '---- channel id: %s -----' % ch
-            cur.execute('SELECT date, day, count FROM history WHERE channel_id = ? ORDER BY date', 
+
+            cur.execute('SELECT date, day, count, dcd, vendor, product, country FROM channel NATURAL JOIN history WHERE channel_id = ? ORDER BY date', 
                     (ch,))
-            for (date, day, count) in cur:
+
+            for (date, day, count, dcd, vendor, product, country) in cur:
+                print '%s %s %s %s' % (dcd, vendor, product, country)
                 print '%s: %4i updates sent, %4i machines total' % (date, day, count)
-
-    def csv(self):
-        cur = self.db.cursor()
-        cur.execute('SELECT DISTINCT channel_id FROM history')
-        channels = [x[0] for x in cur.fetchall()]
-        with open('census-data.csv', 'wb') as f:
-            writer = csv.writer(f)
-            writer.writerow(['date', 'check-ins', 'number-of-machines', 'channel_id'])
-            
-        for ch in channels:
-            # TODO: JOIN on channel table
-            cur.execute('SELECT date, day, count, channel_id FROM history WHERE channel_id = ? ORDER BY date', (ch,))
-            with open('census-data.csv', 'ab') as f:
+                
+    def csv_generic(self, sql=None, filename=None, header=None, start=None, end=None):
+        if sql is None:
+            print "Error: You must supply an SQL query"
+            sys.exit(1)
+        if filename is None:
+            print "Error: You must supply an output filename"
+            sys.exit(1)
+        if start is None or end is None:
+            print "Error: You must supply a --start_date and --end_date!"
+            sys.exit(1)
+        else:
+            cur = self.db.cursor()
+            cur.execute(sql, (start, end))
+            filename = filename % (start, end)
+            with open(filename, 'wb') as f:
                 writer = csv.writer(f)
-                writer.writerows(cur)
-        f.close()
+                writer.writerow(['Check-ins for %s through %s' % (start, end)])
+                if header is not None:
+                    writer.writerow(header)
+                    writer.writerows(cur)
+            f.close()
 
+    def csv(self, start, end):
+        sql = 'SELECT date, day, count, channel_id, dcd, vendor, product, country  FROM channel NATURAL JOIN history WHERE date BETWEEN ? AND ? GROUP BY channel_id'
+        filename = 'census-data-%s-%s.csv'
+        header = ['date', 'check-ins', 'number-of-machines', 'channel_id', 'image', 'vendor', 'product', 'country']
+        self.csv_generic(sql, filename, header, start, end)
 
+    def csv_geo(self, start=None, end=None):
+        sql = 'SELECT sum(day), sum(count), country FROM channel NATURAL JOIN history WHERE date BETWEEN ? AND ? GROUP BY country'
+        filename = 'census-by-image-%s-%s.csv'
+        header = ['check-ins', 'number-of-machines', 'GEO']
+        self.csv_generic(sql, filename, header, start, end)
+
+    def csv_image(self, start, end):
+        sql = 'SELECT sum(day), sum(count), dcd FROM channel NATURAL JOIN history WHERE date BETWEEN ? AND ? GROUP BY dcd'
+        filename = 'census-by-image-%s-%s.csv'
+        header = ['check-ins', 'number-of-machines', 'OEM Image Name']
+        self.csv_generic(sql, filename, header, start, end)
+
+    def csv_image_geo(self, start, end):
+        sql = 'SELECT sum(day), sum(count), dcd, country FROM channel NATURAL JOIN history WHERE date BETWEEN ? AND ? GROUP BY dcd, country'
+        filename = 'census-by-image-and-geo-%s-%s.csv'
+        header = ['check-ins', 'number-of-machines', 'OEM Image Name', 'GEO']
+        self.csv_generic(sql, filename, header, start, end)
+
+    def csv_vendor(self, start, end):
+        sql = 'SELECT sum(day), sum(count), vendor FROM channel NATURAL JOIN history WHERE date between ? and ? GROUP BY vendor'
+        filename = 'census-by-vendor-%s-%s.csv'
+        header = ['check-ins', 'number-of-machines', 'Vendor Name']
+        self.csv_generic(sql, filename, header, start, end)
+
+    def csv_vendor_geo(self, start, end):
+        sql = 'SELECT sum(day), sum(count), vendor, country FROM channel NATURAL JOIN history WHERE date BETWEEN ? AND ? GROUP BY vendor, country'
+        filename = 'census-by-vendor-and-geo-%s-%s.csv'
+        header = ['check-ins', 'number-of-machines', 'Vendor Name', 'GEO']
+        self.csv_generic(sql, filename, header, start, end)
+    
+    def csv_model(self, start, end):
+        sql = 'SELECT sum(day), sum(count), vendor, product FROM channel NATURAL JOIN history WHERE date BETWEEN ? AND ? GROUP BY product'
+        filename = 'census-by-model-%s-%s.csv'
+        header = ['check-ins', 'number-of-machines', 'Vendor Name', 'Model Name']
+        self.csv_generic(sql, filename, header, start, end)
+
+    def csv_model_geo(self, start, end):
+        sql = 'SELECT sum(day), sum(count), vendor, product, country FROM channel NATURAL JOIN history WHERE date BETWEEN ? AND ? GROUP BY product, country'
+        filename = 'census-by-model-and-geo-%s-%s.csv'
+        header = ['check-ins', 'number-of-machines', 'Vendor Name', 'Model Name', 'GEO']
+        self.csv_generic(sql, filename, header, start, end)
+          
     def plot(self, directory, daily_pings=False):
         '''Generate gnuplot charts.
 
@@ -450,10 +506,28 @@ def parse_args():
             help='Generate graphs to given output directory')
     parser.add_option('--daily', action='store_true', default=False, 
             help='Show number of received daily updates on plots')
+    parser.add_option('--start_date', metavar='YYYY-MM-DD',
+            help='Used with csv file generation to capture date ranges in YYYY-MM-DD format')
+    parser.add_option('--end_date', metavar='YYYY-MM-DD',
+            help='Used with csv file generation to capture date ranges in YYYY-MM-DD format')
     parser.add_option('--csv', action='store_true',
-            help='Dump current history into a csv file')
-
-
+            help='Dump entire database history into a csv file for a given period. Requires --start_date and --end_date')
+    parser.add_option('--csv_geo', action='store_true',
+            help='Dump check-ins by country into a csv file for a given period. Requires --start_date and --end_date')
+    parser.add_option('--csv_image', action='store_true',
+            help='Dump check-ins by OEM image name into a csv file for a given period. Requires --start_date and --end_date')
+    parser.add_option('--csv_image_geo', action='store_true',
+            help='Dump check-ins by OEM image and geography into a csv file for a given period.  Requires --start_date and --end_date') 
+    parser.add_option('--csv_vendor', action='store_true',
+            help='Dump check-ins by manufacturer name into a csv file for a given period.  Requires --start_date and --end_date')
+    parser.add_option('--csv_vendor_geo', action='store_true',
+            help='Dump check-ins by manufacturer and geography into a csv file for a given period.  Requires --start_date and --end_date')
+    parser.add_option('--csv_model', action='store_true',
+            help='Dump check-ins by model name into a csv file for a given period.  Requires --start_date and --end_date')
+    parser.add_option('--csv_model_geo', action='store_true',
+            help='Dump check-ins by model name and geography into a csv file for a given period.  Requires --start_date and --end_date')
+    
+   
     (opts, args) = parser.parse_args()
 
     if not opts.test:
@@ -518,9 +592,30 @@ def main():
 
     if opts.gnuplot:
         state.plot(opts.gnuplot, opts.daily)
-    if opts.csv:
-        state.csv()
 
+    if opts.csv:
+        state.csv(opts.start_date,opts.end_date)
+
+    if opts.csv_geo:
+        state.csv_geo(opts.start_date,opts.end_date)
+
+    if opts.csv_image:
+        state.csv_image(opts.start_date,opts.end_date)
+
+    if opts.csv_image_geo:
+        state.csv_image_geo(opts.start_date,opts.end_date)
+  
+    if opts.csv_vendor:
+        state.csv_vendor(opts.start_date, opts.end_date)
+    
+    if opts.csv_vendor_geo:
+        state.csv_vendor_geo(opts.start_date, opts.end_date)
+
+    if opts.csv_model:
+        state.csv_model(opts.start_date, opts.end_date)
+
+    if opts.csv_model_geo:
+        state.csv_model_geo(opts.start_date, opts.end_date)
 
 if __name__ == '__main__':
     main()
