@@ -308,7 +308,7 @@ class State:
                 writer.writerow(['Check-ins for %s through %s' % (start, end)])
                 if header is not None:
                     writer.writerow(header)
-                    writer.writerows(cur)
+                writer.writerows(cur)
             f.close()
 
     def csv(self, start, end):
