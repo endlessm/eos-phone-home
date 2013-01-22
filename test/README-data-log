@@ -1,0 +1,18 @@
+The data-2013-01-01-2013-01-22.log file contains up-to-date sanitized apache logs.
+
+This log data mimics what is fed to the census database on the server side on canonical's servers.
+This log contains machine check-ins from January 1, 2013 through January 22, 2013. 
+
+To create a test database with the census tool using this data, please run the following command:
+
+./census -d <your-database>.db -l data-2013-01-01-2013-01-22.log 
+
+..where <your-database> is whichever name you want to give to your sample database.
+
+You can then generate various reports using such commands as:
+
+./census -d <your-database>.db --text
+
+...to get a text dump of the database. 
+
+More options can be found by running "./census --help". 
