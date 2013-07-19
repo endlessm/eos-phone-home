@@ -312,7 +312,7 @@ class State:
             f.close()
 
     def csv(self, start, end):
-        sql = 'SELECT date, sum(day), count, channel_id, dcd, vendor, product, country  FROM channel NATURAL JOIN history WHERE date BETWEEN ? AND ? GROUP BY channel_id'
+        sql = 'SELECT date, day, count, channel_id, dcd, vendor, product, country  FROM channel NATURAL JOIN history WHERE date BETWEEN ? AND ?'
         filename = 'census-data-%s-%s.csv'
         header = ['date', 'check-ins', 'number-of-machines', 'channel_id', 'image', 'vendor', 'product', 'country']
         self.csv_generic(sql, filename, header, start, end)
