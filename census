@@ -312,49 +312,49 @@ class State:
             f.close()
 
     def csv(self, start, end):
-        sql = 'SELECT date, day, count, channel_id, dcd, vendor, product, country  FROM channel NATURAL JOIN history WHERE date BETWEEN ? AND ? GROUP BY channel_id'
+        sql = 'SELECT date, day, count, channel_id, dcd, vendor, product, country  FROM channel NATURAL JOIN history WHERE date BETWEEN ? AND ?'
         filename = 'census-data-%s-%s.csv'
         header = ['date', 'check-ins', 'number-of-machines', 'channel_id', 'image', 'vendor', 'product', 'country']
         self.csv_generic(sql, filename, header, start, end)
 
     def csv_geo(self, start=None, end=None):
-        sql = 'SELECT sum(day), sum(count), country FROM channel NATURAL JOIN history WHERE date BETWEEN ? AND ? GROUP BY country'
+        sql = 'SELECT sum(day), max(count), country FROM channel NATURAL JOIN history WHERE date BETWEEN ? AND ? GROUP BY country'
         filename = 'census-by-geo-%s-%s.csv'
         header = ['check-ins', 'number-of-machines', 'GEO']
         self.csv_generic(sql, filename, header, start, end)
 
     def csv_image(self, start, end):
-        sql = 'SELECT sum(day), sum(count), dcd FROM channel NATURAL JOIN history WHERE date BETWEEN ? AND ? GROUP BY dcd'
+        sql = 'SELECT sum(day), max(count), dcd FROM channel NATURAL JOIN history WHERE date BETWEEN ? AND ? GROUP BY dcd'
         filename = 'census-by-image-%s-%s.csv'
         header = ['check-ins', 'number-of-machines', 'OEM Image Name']
         self.csv_generic(sql, filename, header, start, end)
 
     def csv_image_geo(self, start, end):
-        sql = 'SELECT sum(day), sum(count), dcd, country FROM channel NATURAL JOIN history WHERE date BETWEEN ? AND ? GROUP BY dcd, country'
+        sql = 'SELECT sum(day), max(count), dcd, country FROM channel NATURAL JOIN history WHERE date BETWEEN ? AND ? GROUP BY dcd, country'
         filename = 'census-by-image-and-geo-%s-%s.csv'
         header = ['check-ins', 'number-of-machines', 'OEM Image Name', 'GEO']
         self.csv_generic(sql, filename, header, start, end)
 
     def csv_vendor(self, start, end):
-        sql = 'SELECT sum(day), sum(count), vendor FROM channel NATURAL JOIN history WHERE date between ? and ? GROUP BY vendor'
+        sql = 'SELECT sum(day), max(count), vendor FROM channel NATURAL JOIN history WHERE date between ? and ? GROUP BY vendor'
         filename = 'census-by-vendor-%s-%s.csv'
         header = ['check-ins', 'number-of-machines', 'Vendor Name']
         self.csv_generic(sql, filename, header, start, end)
 
     def csv_vendor_geo(self, start, end):
-        sql = 'SELECT sum(day), sum(count), vendor, country FROM channel NATURAL JOIN history WHERE date BETWEEN ? AND ? GROUP BY vendor, country'
+        sql = 'SELECT sum(day), max(count), vendor, country FROM channel NATURAL JOIN history WHERE date BETWEEN ? AND ? GROUP BY vendor, country'
         filename = 'census-by-vendor-and-geo-%s-%s.csv'
         header = ['check-ins', 'number-of-machines', 'Vendor Name', 'GEO']
         self.csv_generic(sql, filename, header, start, end)
     
     def csv_model(self, start, end):
-        sql = 'SELECT sum(day), sum(count), vendor, product FROM channel NATURAL JOIN history WHERE date BETWEEN ? AND ? GROUP BY product'
+        sql = 'SELECT sum(day), max(count), vendor, product FROM channel NATURAL JOIN history WHERE date BETWEEN ? AND ? GROUP BY product'
         filename = 'census-by-model-%s-%s.csv'
         header = ['check-ins', 'number-of-machines', 'Vendor Name', 'Model Name']
         self.csv_generic(sql, filename, header, start, end)
 
     def csv_model_geo(self, start, end):
-        sql = 'SELECT sum(day), sum(count), vendor, product, country FROM channel NATURAL JOIN history WHERE date BETWEEN ? AND ? GROUP BY product, country'
+        sql = 'SELECT sum(day), max(count), vendor, product, country FROM channel NATURAL JOIN history WHERE date BETWEEN ? AND ? GROUP BY product, country'
         filename = 'census-by-model-and-geo-%s-%s.csv'
         header = ['check-ins', 'number-of-machines', 'Vendor Name', 'Model Name', 'GEO']
         self.csv_generic(sql, filename, header, start, end)
