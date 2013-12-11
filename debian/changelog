@@ -1,3 +1,9 @@
+canonical-poke (0.3.7) precise; urgency=low
+
+  * Fix product identification for LENOVO machines. (LP: #1203089)
+
+ -- Kevin McDermott <kevin.mcdermott@canonical.com>  Wed, 11 Dec 2013 08:33:12 +0000
+
 canonical-poke (0.3.6) precise; urgency=low
 
   * change "SCRIPT" line in send-poke to http://poke.canonical.com (LP: #1091935)
