@@ -1,6 +1,0 @@
-1.2.3.4 - - [21/Jul/2010:16:58:19 +0200] "GET /index.html HTTP/1.1" 200 1767 "-" "Mozilla/5.0 (compatible; DotBot/1.1; http://www.dotnetdotcom.org/, crawler@dotnetdotcom.org)"
-217.235.104.216 - - [21/Jul/2010:16:58:20 +0200] "GET /census?count=0&dcd=canonical-foo-123&product=SuperBook HTTP/1.0" 200 3 "-" "Wget/1.12 (linux-gnu)"
-4.3.2.1 - - [21/Jul/2010:16:58:21 +0200] "GET /favicon.ico HTTP/1.1" 200 - "-" "Mozilla/5.0 (Windows; U; Windows NT 6.1; de; rv:1.9.1.10) Gecko/20100504 Firefox/3.5.10"
-217.235.104.216 - - [21/Jul/2010:16:58:22 +0200] "GET /census?count=0&dcd=canonical-bar-1337 HTTP/1.0" 200 3 "-" "Wget/1.12 (linux-gnu)"
-192.168.2.100 - - [21/Jul/2010:16:59:43 +0200] "GET /2008/bar.html HTTP/1.1" 200 29218 "-" "Mozilla/5.0 (compatible; ScoutJet; +http://www.scoutjet.com/)"
-217.235.104.216 - - [22/Jul/2010:10:00:00 +0200] "GET /census?count=0&dcd=canonical-foo-123&product=Clamshell HTTP/1.0" 200 3 "-" "Wget/1.12 (linux-gnu)"
