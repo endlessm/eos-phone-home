@@ -1,3 +1,9 @@
+canonical-poke (0.3.8) precise; urgency=medium
+
+  * Replaces canonical-poke-canary. 
+
+ -- David Murphy <david.murphy@canonical.com>  Tue, 01 Apr 2014 13:45:44 +0100
+
 canonical-poke (0.3.7) precise; urgency=low
 
   * Fix product identification for LENOVO machines. (LP: #1203089)
