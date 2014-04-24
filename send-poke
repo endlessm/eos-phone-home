@@ -15,11 +15,13 @@ PERIOD=$(echo $(dirname $0) | sed -e 's/.*\.//' | \
     sed -n '/hourly\|daily\|weekly\|monthly/ p')
 PERIOD=${PERIOD:-manual}
 
+COUNTDIR=/var/lib/send-install-count
+FIRSTRUNFILE=$COUNTDIR/firstrun
 # We want to send a different count depending on the determined period
 if [ $PERIOD == daily ]; then
-    COUNTFILE=/var/lib/send-install-count/counter
+    COUNTFILE=$COUNTDIR/counter
 else
-    COUNTFILE=/var/lib/send-install-count/counter-$PERIOD
+    COUNTFILE=$COUNTDIR/counter-$PERIOD
 fi
 
 DCD=/var/lib/ubuntu_dist_channel
@@ -37,11 +39,21 @@ if [ -e $COUNTFILE ]; then
     [ -w $COUNTFILE ]
 else
     echo 0 > $COUNTFILE
+    # Store the date we first ran
+    if [ ! -e $FIRSTRUNFILE ]; then
+        date +%Y-%M-%d > $FIRSTRUNFILE
+    fi
 fi
-
 
 # get current count
 cur=$(< $COUNTFILE)
+
+# get first run date
+if [ -e $FIRSTRUNFILE ]; then
+    firstrun=$(< $FIRSTRUNFILE)
+else
+    firstrun="unknown"
+fi
 
 # get DCD
 channel=$(sed -n '/^[[:alnum:]]/ { p; q}' $DCD)
@@ -61,7 +73,7 @@ product=$(< "$product_path" ) || product=''
 product="${product%"${product##*[![:space:]]}"}"
 
 # report in
-if ! out=$(wget -O - -q "$SCRIPT?count=$cur&dcd=$channel&product=$product&vendor=$vendor&release=$DISTRIB_RELEASE&period=$PERIOD"); then
+if ! out=$(wget -O - -q "$SCRIPT?count=$cur&dcd=$channel&product=$product&vendor=$vendor&release=$DISTRIB_RELEASE&period=$PERIOD&firstrun=$firstrun"); then
     #echo "wget failed"
     exit 0
 fi
@@ -73,5 +85,3 @@ fi
 # update counter
 ((cur=cur+1))
 echo $cur > $COUNTFILE
-
-
