@@ -5,12 +5,23 @@
 # version (/var/lib/ubuntu_dist_channel), the machine product name, and a
 # counter how many pings were sent.
 #
-# (C) 2010 Canonical Ltd.
+# (C) 2014 Canonical Ltd.
 # License: GPL v2 or later
 
 set -e
 
-COUNTFILE=/var/lib/send-install-count/counter
+# We need to know if we are being run by cron or manually.
+PERIOD=$(echo $(dirname $0) | sed -e 's/.*\.//' | \
+    sed -n '/hourly\|daily\|weekly\|monthly/ p')
+PERIOD=${PERIOD:-manual}
+
+# We want to send a different count depending on the determined period
+if [ $PERIOD == daily ]; then
+    COUNTFILE=/var/lib/send-install-count/counter
+else
+    COUNTFILE=/var/lib/send-install-count/counter-$PERIOD
+fi
+
 DCD=/var/lib/ubuntu_dist_channel
 SCRIPT=http://poke.canonical.com/submit
 
@@ -50,7 +61,7 @@ product=$(< "$product_path" ) || product=''
 product="${product%"${product##*[![:space:]]}"}"
 
 # report in
-if ! out=$(wget -O - -q "$SCRIPT?count=$cur&dcd=$channel&product=$product&vendor=$vendor&release=$DISTRIB_RELEASE"); then
+if ! out=$(wget -O - -q "$SCRIPT?count=$cur&dcd=$channel&product=$product&vendor=$vendor&release=$DISTRIB_RELEASE&period=$PERIOD"); then
     #echo "wget failed"
     exit 0
 fi
