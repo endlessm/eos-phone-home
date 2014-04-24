@@ -1,7 +1,7 @@
 #!/bin/sh
 
 PREREQ=""
-DESCRIPTION="Disabling census while in livefs..."
+DESCRIPTION="Disabling poke while in livefs..."
 
 prereqs()
 {
@@ -20,6 +20,8 @@ esac
 
 log_begin_msg "$DESCRIPTION"
 
-rm -f /root/etc/cron.daily/send-census
+rm -f /root/etc/cron.daily/send-poke
+rm -f /root/etc/cron.weekly/send-poke
+rm -f /root/etc/cron.monthly/send-poke
 
 log_end_msg
