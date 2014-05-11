@@ -1,3 +1,9 @@
+canonical-poke (0.4.1) trusty; urgency=medium
+
+  * Fix formatting of firstrun date.
+
+ -- David Murphy <david.murphy@canonical.com>  Sun, 11 May 2014 23:10:50 +0100
+
 canonical-poke (0.4.0) trusty; urgency=medium
 
   * Send pokes on a daily, weekly, and monthly basis.

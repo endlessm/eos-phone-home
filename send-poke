@@ -41,7 +41,7 @@ else
     echo 0 > $COUNTFILE
     # Store the date we first ran
     if [ ! -e $FIRSTRUNFILE ]; then
-        date +%Y-%M-%d > $FIRSTRUNFILE
+        date +%Y-%m-%d > $FIRSTRUNFILE
     fi
 fi
 
