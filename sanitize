@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 
-# This script attempts to take the existing apache access logs
-# and process them so that we get only the data we care about. From there,
-# further sanitize it so that specific IP addresses are not revealed.  We
-# use GeoIP lookups to determine the country of origin and then substitue
-# the IP address with that code. We also are grabbing logs based on date ranges
-# to keep the data sets as small as possible.
+# This script attempts to take the existing apache access logs and
+# process them so that we get only the data we care about. From there,
+# further sanitize it so that specific IP addresses are not revealed.
+# We use GeoIP lookups to determine the country of origin and then
+# substitute the IP address with that code. We also are grabbing logs
+# based on date ranges to keep the data sets as small as possible.
 
 import re
 import GeoIP
@@ -15,7 +15,7 @@ from time import gmtime, strftime
 from datetime import datetime
 
 
-# useful if we want to get an unkown date from a log
+# useful if we want to get an unknown date from a log
 def getdate(li):
     li = li.split(' ')[3][1:21]
     return li
@@ -42,9 +42,9 @@ except IndexError:
     print "You must supply a filename!"
     sys.exit(1)
 
-# Get the start date from our timestamp file.
-# If one does not exist, get the earliest date from
-# the squid log and use it as our starting point.
+# Get the start date from our timestamp file.  If one does not exist,
+# get the earliest date from the squid log and use it as our starting
+# point.
 try:
     start_date = open('data_timestamp', 'r').read()
     start_date = datetime.strptime(start_date, d_format)
