@@ -49,6 +49,9 @@ try:
     start_date = open('data_timestamp', 'r').read()
     start_date = datetime.strptime(start_date, d_format)
     print str(start_date)
+    # Set the end date for the current time
+    end_date = strftime(d_format, gmtime())
+    end_date = datetime.strptime(end_date, d_format)
 except:
     if log_file.endswith('.gz'):
         d = gzip.open(log_file)
@@ -61,9 +64,9 @@ except:
     start_date = datetime.strptime(start_date, d_format)
     print str(start_date)
 
-# Set the end date for the current time.
-end_date = strftime(d_format, gmtime())
-end_date = datetime.strptime(end_date, d_format)
+    # Set the end date for the latest timestamp in the file.
+    end_date = getdate(c[-1])
+    end_date = datetime.strptime(end_date, d_format)
 
 #### Parse the Squid Logs ####
 
