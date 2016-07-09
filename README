@@ -1,0 +1,16 @@
+Endless OS "Phone Home"
+-----------------------
+
+This is based off https://launchpad.net/canonical-poke imported from bzr to git
+on Sat 9th July 2016. The "census" (simple sqlite stats processing) and
+"sanitize" (log cleanup / anonymisation) have been reinstated from the bzr
+history and separate bzr branch.
+
+The intention is to re-use the anonymous counting approach set out in
+http://theravingrick.blogspot.co.uk/2010/08/can-we-count-users-without-uniquely.html
+so that Endless can dermine the number of active systems without sending any
+trackable information, but in the immediate term we are implementing a one-off
+"activate" request so we can tell how many systems have been turned on. This
+request does include the machine serial number, but this is not personally
+identifiable information, and is only ever sent once so cannot be used for any
+ongoing tracking.
