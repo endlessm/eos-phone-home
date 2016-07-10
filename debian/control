@@ -1,21 +1,23 @@
-Source: canonical-poke
+Source: eos-phone-home
 Section: admin
 Priority: extra
-Maintainer: David Murphy <david.murphy@canonical.com>
+Maintainer: Robert McQueen <rob@endlessm.com>
 Build-Depends: debhelper (>= 7)
 Standards-Version: 3.9.4
-Vcs-Bzr: https://code.launchpad.net/~canonical-poke/canonical-poke/trunk
+Vcs-Git: https://github.com/endlessm/eos-phone-home.git
 
-Package: canonical-poke
+Package: eos-phone-home
 Architecture: all
-Depends: cron, wget, ${misc:Depends}
-Provides: canonical-poke-canary
-Conflicts: canonical-poke-canary
-Replaces: canonical-poke-canary
-Description: send "I am alive" ping to Canonical
- This package installs a daily cron job for surveying how many original OEM
- installs are running in the world. Note that this does not send any
- user specific data: it only transmits the operating system version
- (/var/lib/ubuntu_dist_channel), the machine product name, and a count of how
- many pings have been sent (cumulative).
-
+Depends: wget, ${misc:Depends}
+Description: send "I am alive" ping to Endless
+ This package installs a periodic systemd timer to send a one-off activation
+ message (on first boot-up) and a daily ping to Endless, in order to discover
+ how many Endless OS systems are started and how many remain active across the
+ world.
+ 
+ Note that this does not send any identifiable user data: it only transmits the
+ originally installed operating system version, the current version, the
+ machine vendor & product name. When the first activation message is sent, it
+ contains the machine serial number, but this is not sent again so cannot be
+ used for tracking purposes. The daily ping simply contains a count of how many
+ pings have been sent (cumulative).
