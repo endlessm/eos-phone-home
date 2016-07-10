@@ -1,0 +1,7 @@
+[Unit]
+Description=Send system activation to Endless
+Wants=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/lib/eos-phone-home/activate

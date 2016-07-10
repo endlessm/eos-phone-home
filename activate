@@ -1,0 +1,90 @@
+#!/bin/bash
+# This script sends a one-off activation message (on first boot-up) to
+# Endless, in order to discover how many Endless OS systems are started
+# across the world.
+# 
+# Note that this does not send any identifiable user data: it only transmits the
+# originally installed operating system version, the current version, the
+# machine vendor & product name. When the first activation message is sent, it
+# contains the machine serial number, but this is not sent again so cannot be
+# used for tracking purposes.
+# 
+# (C) 2014 Canonical Ltd.
+# (C) 2016 Endless Mobile Inc.
+# License: GPL v2 or later
+
+# https://home.endlessm.com/activate
+# 
+# Arguments in the query string will be:
+# 
+#  image (the image name, from the xattr on /)
+#  release (from /etc/os-release)
+#  vendor (from DMI / device tree)
+#  product (from DMI / device tree)
+#  serial (from DMI, only if this is an OEM image)
+#  live (true if this is a live USB, false if not)
+
+set -e
+
+DIR=/var/lib/eos-phone-home
+
+if [ ! -d $DIR || ! -w $DIR ]; then
+    exit 1
+fi
+
+ACTIVATEDFILE=$DIR/activated
+
+# Give me a ping, Vasili. One ping only, please.
+if [ -e $ACTIVATEDFILE ]; then
+    exit 0
+fi
+
+SCRIPT=https://home.endlessm.com/activate
+
+image=$(attr -gq attr -g eos-image-version /) || image=''
+
+eval $(grep ^VERSION= /etc/os-release)
+release=${VERSION}
+
+if [ -d /sys/class/dmi/id ]; then
+    # get machine vendor name
+    vendor=$(< /sys/class/dmi/id/sys_vendor) || vendor=''
+    vendor="${vendor%"${vendor##*[![:space:]]}"}"
+    
+    # do we want to do this? hmm...
+    #if [ "$vendor" == "LENOVO" ]; then
+    #  product_path="/sys/class/dmi/id/product_version"
+    #else
+    product_path="/sys/class/dmi/id/product_name"
+    #fi
+    
+    # get machine product name
+    product=$(< "$product_path" ) || product=''
+    product="${product%"${product##*[![:space:]]}"}"
+    
+    # get machine serial number
+    serial=$(< /sys/class/dmi/id/product_serial) || serial=''
+    serial="${serial%"${serial##*[![:space:]]}"}"
+else
+    compat=$(head -n1 /proc/device-tree/compatible)
+    vendor=$(echo ${compat} | cut -d, -f1)
+    product=$(echo ${compat} | cut -d, -f2)
+    serial='' # FIXME
+fi
+
+# FIXME implement actual detection here
+live=false
+
+# report in
+if ! out=$(wget -O - -q "$SCRIPT?image=$image&release=$release&vendor=$vendor&product=$product&serial=$serial&live=$live"); then
+    echo "wget failed"
+    exit 1
+fi
+if [ "$out" != "OK" ]; then
+    echo "invalid page"
+    exit 1
+fi
+
+# touch file to record activation
+: >$ACTIVATEDFILE
+

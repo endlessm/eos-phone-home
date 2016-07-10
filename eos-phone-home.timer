@@ -1,0 +1,13 @@
+[Unit]
+Description=Send system activation to Endless
+Wants=network.target
+ConditionPathExists!=/var/lib/eos-phone-home/activated
+
+[Timer]
+OnBootSec=15m
+OnUnitInactiveSec=6h
+AccuracySec=30m
+RandomizedDelaySec=15m
+
+[Install]
+WantedBy=multi-user.target
