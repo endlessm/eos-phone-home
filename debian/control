@@ -14,7 +14,7 @@ Description: send "I am alive" ping to Endless
  message (on first boot-up) and a daily ping to Endless, in order to discover
  how many Endless OS systems are started and how many remain active across the
  world.
- 
+ .
  Note that this does not send any identifiable user data: it only transmits the
  originally installed operating system version, the current version, the
  machine vendor & product name. When the first activation message is sent, it
