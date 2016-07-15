@@ -1,0 +1,72 @@
+Canonical Poke datbase information
+Current as of db_version '0' (initial production version of the db)
+
+== Database Schema ==
+
+=== Table: db_version ===
+Purpose: 
+    Record the revision of the database; can be used to assist data migration 
+    from one revision to another
+==== Schema ====
+version INT NOT NULL
+    Holds the version of the database. Incremement this each time the 
+    database schema changes
+
+
+=== Table: last_update ===
+Purpose: 
+    Records the time the database was last updated
+==== Schema ====
+timestamp DOUBLE NOT NULL
+    Unix timestamp of the last time the database was updated
+
+
+=== Table: counters ===
+Purpose: 
+    Primary data structure for counting the number of times machines phone 
+    home more than once
+==== Schema ====
+channel_id PRIMARY KEY
+    Unique identifier of the channel
+counters TEXT
+    One-dimensional CSV text array that counts the number of machines in the 
+    channel that have checked in a certain number of times. For each array 
+    index i, the value is the number of machines that have checked in i times. 
+
+    For example the text [1, 0, 1] indicates that once machine has checked in 1 
+    time and one machine has checked in 3 times. In this example, no machines 
+    have checked in exactly 2 times.
+
+
+=== Table: history ===
+Purpose: 
+    Record daily changes to each channel
+==== Schema ====
+channel_id INT NOT NULL
+    Unique identifier of the channel
+date CHAR(12)
+    Date of this record; date on which the channel received a ping
+day INT NOT NULL
+    Total # of pings in the channel on $date. Only counts pings on this date, 
+    not on previous dates
+count INT NOT NULL
+    Total # of machines in the channel as of $date. Aggregate value; includes 
+    the count of machines seen on previous dates
+
+
+=== Table: channel ===
+Purpose: 
+    Store details about a channel including OS image, vendor, and vendor product
+==== Schema ====
+channel_ID PRIMARY KEY
+    Unique identifier of the channel
+dcd CHAR(100)
+    The Distribution Channel Descriptor for this channel. Describes the OS 
+    image used reported by the client
+vendor CHAR(100)
+    The hardware vendor reported by the client, e.g. "Dell, Inc"
+product CHAR(100)
+    The product name reported by the client, e.g. "Alienware X51 R2"
+country CHAR(3)
+    Two-letter country code of the location of the client, as determined by 
+    GeoIP lookup of the client's IP address, e.g. "TW"

@@ -1,0 +1,94 @@
+eos-phone-home (1.0) master; urgency=low
+
+  * Initial version for Endless OS.
+
+ -- Robert McQueen <rob@endlessm.com>  Sat, 09 Jul 2016 14:02:03 +0100
+
+canonical-poke (0.4.1) trusty; urgency=medium
+
+  * Fix formatting of firstrun date.
+
+ -- David Murphy <david.murphy@canonical.com>  Sun, 11 May 2014 23:10:50 +0100
+
+canonical-poke (0.4.0) trusty; urgency=medium
+
+  * Send pokes on a daily, weekly, and monthly basis.
+  * Stores and sends date of first run.
+
+ -- David Murphy <david.murphy@canonical.com>  Thu, 24 Apr 2014 23:35:52 +0100
+
+canonical-poke (0.3.8) precise; urgency=medium
+
+  * Replaces canonical-poke-canary. 
+
+ -- David Murphy <david.murphy@canonical.com>  Tue, 01 Apr 2014 13:45:44 +0100
+
+canonical-poke (0.3.7) precise; urgency=low
+
+  * Fix product identification for LENOVO machines. (LP: #1203089)
+
+ -- Kevin McDermott <kevin.mcdermott@canonical.com>  Wed, 11 Dec 2013 08:33:12 +0000
+
+canonical-poke (0.3.6) precise; urgency=low
+
+  * change "SCRIPT" line in send-poke to http://poke.canonical.com (LP: #1091935)
+
+ -- Kent Baxley <kent.baxley@canonical.com>  Wed, 19 Dec 2012 13:53:14 -0600
+
+canonical-poke (0.3.5) precise; urgency=low
+
+  * rename to canonical-poke (LP: #1088839)
+
+ -- Kent Baxley <kent.baxley@canonical.com>  Tue, 11 Dec 2012 09:08:02 -0600
+
+canonical-census (0.3.4) precise; urgency=low
+
+  * Added a way to chop off trailing whitespace on sys_vendor and 
+    product_id. Some machines leave a ton of it apparently. 
+
+ -- Kent Baxley <kent.baxley@canonical.com>  Fri, 26 Oct 2012 17:01:57 -0500
+
+canonical-census (0.3.3) precise; urgency=low
+
+  * Supply correct uri information in census tool (LP: 1065620).
+  * Add vendor information tp census tool, mostly as a placeholder 
+    for now.
+
+ -- Kent Baxley <kent.baxley@canonical.com>  Thu, 18 Oct 2012 11:54:26 -0500
+
+canonical-census (0.3.2) precise; urgency=low
+
+  * Do not truncate product information in send-census (LP: #1065530).
+  * Capture vendor info from sys_vendor (LP: #1065533).
+
+ -- Kent Baxley <kent.baxley@canonical.com>  Thu, 18 Oct 2012 10:07:09 -0500
+
+canonical-census (0.3.1) precise; urgency=low
+
+  * source /scripts/casper-functions after the prereqs argument in the
+    46disable_census script.  This avoids warnings when updating initramfs
+    (LP: #1065574).
+
+ -- Kent Baxley <kent.baxley@canonical.com>  Tue, 16 Oct 2012 10:52:46 -0500
+
+canonical-census (0.3) precise; urgency=low
+
+  * Bumped version and changed distribution to precise for the Watauga project. 
+
+ -- Chris Townsend <christopher.townsend@canonical.com>  Wed, 29 Feb 2012 10:28:40 -0500
+
+canonical-census (0.2) UNRELEASED; urgency=low
+
+  * send-census: Verify that the census page delivers "OK", as opposed to some
+    error messages, proxy pages, etc.
+  * sendd-census: Make sure that we can write the counter file. Otherwise, if
+    writing fails after we already sent the ping, we'd send a perpetual series
+    of zeros.
+
+ -- Martin Pitt <martin.pitt@canonical.com>  Fri, 20 Aug 2010 14:03:26 +0200
+
+canonical-census (0.1) lucid; urgency=low
+
+  * Initial release.
+
+ -- Martin Pitt <martin.pitt@canonical.com>  Mon, 26 Jul 2010 07:39:03 +0200

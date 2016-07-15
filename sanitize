@@ -1,0 +1,111 @@
+#!/usr/bin/env python
+
+# This script attempts to take the existing apache access logs and
+# process them so that we get only the data we care about. From there,
+# further sanitize it so that specific IP addresses are not revealed.
+# We use GeoIP lookups to determine the country of origin and then
+# substitute the IP address with that code. We also are grabbing logs
+# based on date ranges to keep the data sets as small as possible.
+
+import re
+import GeoIP
+import gzip
+import sys
+from time import gmtime, strftime
+from datetime import datetime
+
+
+# useful if we want to get an unknown date from a log
+def getdate(li):
+    li = li.split(' ')[3][1:21]
+    return li
+
+# regular expression search parameters
+census_re = re.compile('(\d+\.\d+\.\d+\.\d+)[\s\S]+\[(.+?) [-+]\d{4}\] "GET .*/submit\?([^\s"]+).*?"')  # noqa
+
+# initialize GeoIP
+geoip = GeoIP.new(GeoIP.GEOIP_MEMORY_CACHE)
+
+# This where we'll look for apache logs
+#logdir='/var/log/squid3'
+
+### Set up start and end date ###
+
+# date format that we'll use
+d_format = "%d/%b/%Y:%H:%M:%S"
+
+# Get the filename. Bail if one isn't supplied
+try:
+    log_file = sys.argv[1]
+
+except IndexError:
+    print "You must supply a filename!"
+    sys.exit(1)
+
+# Get the start date from our timestamp file.  If one does not exist,
+# get the earliest date from the squid log and use it as our starting
+# point.
+try:
+    start_date = open('data_timestamp', 'r').read()
+    start_date = datetime.strptime(start_date, d_format)
+    print str(start_date)
+    # Set the end date for the current time
+    end_date = strftime(d_format, gmtime())
+    end_date = datetime.strptime(end_date, d_format)
+except:
+    if log_file.endswith('.gz'):
+        d = gzip.open(log_file)
+    else:
+        d = open(log_file, 'rb')
+
+    c = d.readlines()
+    d.close()
+    start_date = getdate(c[0])
+    start_date = datetime.strptime(start_date, d_format)
+    print str(start_date)
+
+    # Set the end date for the latest timestamp in the file.
+    end_date = getdate(c[-1])
+    end_date = datetime.strptime(end_date, d_format)
+
+#### Parse the Squid Logs ####
+
+print log_file
+
+if log_file.endswith('.gz'):
+    f = gzip.open(log_file)
+else:
+    f = open(log_file)
+for line in f:
+    # grab only the data we care about
+    m = census_re.match(line)
+    if not m:
+        continue
+    # start transferring aggregated data to a new file
+    data_file = ('data' + '-' + str(start_date)[:10] + '-' +
+                 str(end_date)[:10] + '.log')
+    outF = open(data_file, 'a')
+    # dump relevant data into a variable
+    s = m.group()
+    # determine country code from the IP address
+    country = geoip.country_code_by_addr(m.group(1))
+    # if the country lookup doesn't resolve, set it to "**"
+    if not country:
+        country = "**"
+    # substitute IP addresses with the country code
+    outstr = re.sub('(\d+\.\d+\.\d+\.\d+)', country, s)
+    # strip out identity info from the logs
+    outstr = re.sub('\s\S*', "", outstr, 2)
+    # get the dates from the logfile to set up date ranges
+    cur_date = datetime.strptime(m.group(2), d_format)
+    if start_date <= cur_date <= end_date:
+        # write the new log file
+        outF.write(outstr + '\n')
+    outF.close()
+f.close()
+
+# Create a timestamp file for next time
+timefile = open('data_timestamp', 'w')
+stamp = strftime(d_format, gmtime())
+print stamp
+timefile.write(stamp)

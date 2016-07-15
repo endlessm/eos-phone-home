@@ -1,0 +1,87 @@
+#!/bin/bash
+# Send an "I am alive" ping to Canonical. This is used for surveying how many
+# original OEM installs are still existing on real machines. Note that this
+# does not send any user specific data; it only transmits the operating system
+# version (/var/lib/ubuntu_dist_channel), the machine product name, and a
+# counter how many pings were sent.
+#
+# (C) 2014 Canonical Ltd.
+# License: GPL v2 or later
+
+set -e
+
+# We need to know if we are being run by cron or manually.
+PERIOD=$(echo $(dirname $0) | sed -e 's/.*\.//' | \
+    sed -n '/hourly\|daily\|weekly\|monthly/ p')
+PERIOD=${PERIOD:-manual}
+
+COUNTDIR=/var/lib/send-install-count
+FIRSTRUNFILE=$COUNTDIR/firstrun
+# We want to send a different count depending on the determined period
+if [ $PERIOD == daily ]; then
+    COUNTFILE=$COUNTDIR/counter
+else
+    COUNTFILE=$COUNTDIR/counter-$PERIOD
+fi
+
+DCD=/var/lib/ubuntu_dist_channel
+SCRIPT=http://poke.canonical.com/submit
+
+[ -e $DCD ] || exit 0
+
+# read release info
+. /etc/lsb-release || :
+
+# we need to know that we can write the count file, otherwise we'd send a
+# perpetual stream of zeros
+mkdir -p $(dirname $COUNTFILE)
+if [ -e $COUNTFILE ]; then
+    [ -w $COUNTFILE ]
+else
+    echo 0 > $COUNTFILE
+    # Store the date we first ran
+    if [ ! -e $FIRSTRUNFILE ]; then
+        date +%Y-%m-%d > $FIRSTRUNFILE
+    fi
+fi
+
+# get current count
+cur=$(< $COUNTFILE)
+
+# get first run date
+if [ -e $FIRSTRUNFILE ]; then
+    firstrun=$(< $FIRSTRUNFILE)
+else
+    firstrun="unknown"
+fi
+
+# get DCD
+channel=$(sed -n '/^[[:alnum:]]/ { p; q}' $DCD)
+
+# get machine vendor name
+vendor=$(< /sys/class/dmi/id/sys_vendor) || vendor=''
+vendor="${vendor%"${vendor##*[![:space:]]}"}"
+
+if [ "$vendor" == "LENOVO" ]; then
+  product_path="/sys/class/dmi/id/product_version"
+else
+  product_path="/sys/class/dmi/id/product_name"
+fi
+
+# get machine product name
+product=$(< "$product_path" ) || product=''
+product="${product%"${product##*[![:space:]]}"}"
+
+# report in
+if ! out=$(wget -O - -q "$SCRIPT?count=$cur&dcd=$channel&product=$product&vendor=$vendor&release=$DISTRIB_RELEASE&period=$PERIOD&firstrun=$firstrun"); then
+    #echo "wget failed"
+    exit 0
+fi
+if [ "$out" != "OK" ]; then
+    #echo "invalid page"
+    exit 0
+fi
+
+# update counter
+((cur=cur+1))
+echo $cur > $COUNTFILE
