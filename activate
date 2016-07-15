@@ -13,22 +13,22 @@
 # (C) 2016 Endless Mobile Inc.
 # License: GPL v2 or later
 
-# https://home.endlessm.com/activate
+# https://home.endlessm.com/v1/activate
 # 
 # Arguments in the query string will be:
 # 
-#  image (the image name, from the xattr on /)
+#  image (the image name, from the xattr on /sysroot)
 #  release (from /etc/os-release)
 #  vendor (from DMI / device tree)
 #  product (from DMI / device tree)
-#  serial (from DMI, only if this is an OEM image)
+#  serial (from DMI / Endless mfgdata)
 #  live (true if this is a live USB, false if not)
 
 set -e
 
 DIR=/var/lib/eos-phone-home
 
-if [ ! -d $DIR || ! -w $DIR ]; then
+if [ ! -d $DIR -o ! -w $DIR ]; then
     exit 1
 fi
 
@@ -39,18 +39,14 @@ if [ -e $ACTIVATEDFILE ]; then
     exit 0
 fi
 
-SCRIPT=https://home.endlessm.com/activate
+SCRIPT=https://home.endlessm.com/v1/activate
 
-image=$(attr -gq attr -g eos-image-version /) || image=''
+image=$(attr -q -g eos-image-version /sysroot) || image=''
 
 eval $(grep ^VERSION= /etc/os-release)
 release=${VERSION}
 
 if [ -d /sys/class/dmi/id ]; then
-    # get machine vendor name
-    vendor=$(< /sys/class/dmi/id/sys_vendor) || vendor=''
-    vendor="${vendor%"${vendor##*[![:space:]]}"}"
-    
     # do we want to do this? hmm...
     #if [ "$vendor" == "LENOVO" ]; then
     #  product_path="/sys/class/dmi/id/product_version"
@@ -58,19 +54,19 @@ if [ -d /sys/class/dmi/id ]; then
     product_path="/sys/class/dmi/id/product_name"
     #fi
     
-    # get machine product name
+    vendor=$(< /sys/class/dmi/id/sys_vendor) || vendor=''
     product=$(< "$product_path" ) || product=''
-    product="${product%"${product##*[![:space:]]}"}"
-    
-    # get machine serial number
     serial=$(< /sys/class/dmi/id/product_serial) || serial=''
-    serial="${serial%"${serial##*[![:space:]]}"}"
 else
-    compat=$(head -n1 /proc/device-tree/compatible)
+    compat=$(cut -d '' -f1 < /proc/device-tree/compatible) || compat=''
     vendor=$(echo ${compat} | cut -d, -f1)
     product=$(echo ${compat} | cut -d, -f2)
-    serial='' # FIXME
+    serial=$(< /sys/class/endless_mfgdata/entries/SSN) || serial=''
 fi
+
+vendor="${vendor%"${vendor##*[![:space:]]}"}"
+product="${product%"${product##*[![:space:]]}"}"
+serial="${serial%"${serial##*[![:space:]]}"}"
 
 # FIXME implement actual detection here
 live=false
