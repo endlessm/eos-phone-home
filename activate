@@ -68,8 +68,11 @@ vendor="${vendor%"${vendor##*[![:space:]]}"}"
 product="${product%"${product##*[![:space:]]}"}"
 serial="${serial%"${serial##*[![:space:]]}"}"
 
-# FIXME implement actual detection here
-live=false
+# detect live system
+live="false"
+if grep -qw "endless.live" /proc/cmdline; then
+    image="true"
+fi
 
 # report in
 URL="${SCRIPT}?image=${image}&release=${release}&vendor=${vendor}&product=${product}&serial=${serial}&live=${live}"
