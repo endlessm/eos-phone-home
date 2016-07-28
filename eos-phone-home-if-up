@@ -1,8 +1,8 @@
 #!/bin/sh -e
 
-if [ "$IFACE" != "lo" ] || \
-   [ "$MODE" = "start" ] || \
-   [ ! -f /var/lib/eos-phone-home/activated ]; then
+if [ "${IFACE}" = "lo" ] || \
+   [ "${MODE}" != "start" ] || \
+   [ -f /var/lib/eos-phone-home/activated ]; then
     exit 0
 fi
 
