@@ -1,11 +1,11 @@
-#!/bin/sh
+#!/bin/sh -e
 
-[ "$IFACE" != "lo" ] || exit 0
-[ "$MODE" = "start" ] || exit 0
-
-[ ! -f /var/lib/eos-phone-home/activated ] || exit 0
+if [ "${IFACE}" = "lo" ] || \
+   [ "${MODE}" != "start" ] || \
+   [ -f /var/lib/eos-phone-home/activated ]; then
+    exit 0
+fi
 
 /bin/systemctl --no-block start eos-phone-home.service
 
 exit 0
-

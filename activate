@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -e
 # This script sends a one-off activation message (on first boot-up) to
 # Endless, in order to discover how many Endless OS systems are started
 # across the world.
@@ -24,63 +24,72 @@
 #  serial (from DMI / Endless mfgdata)
 #  live (true if this is a live USB, false if not)
 
-set -e
-
-DIR=/var/lib/eos-phone-home
-
-if [ ! -d $DIR -o ! -w $DIR ]; then
+DIR="/var/lib/eos-phone-home"
+if [ ! -d "${DIR}" ] || [ ! -w "${DIR}" ]; then
+    echo "${DIR} missing or not writable"
     exit 1
 fi
 
-ACTIVATEDFILE=$DIR/activated
-
 # Give me a ping, Vasili. One ping only, please.
-if [ -e $ACTIVATEDFILE ]; then
+ACTIVATEDFILE="${DIR}/activated"
+if [ -e "${ACTIVATEDFILE}" ]; then
+    echo "${ACTIVATEDFILE} exists, doing nothing"
     exit 0
 fi
 
-SCRIPT=https://home.endlessm.com/v1/activate
+SCRIPT="${EOS_PHONE_HOME_ACTIVATE_URL:-https://home.endlessm.com/v1/activate}"
 
-image=$(attr -q -g eos-image-version /sysroot) || image=''
+image=$(attr -q -g eos-image-version /sysroot 2>/dev/null ) || true
+if [ "${image}" != "" ]; then
+    image_root=$(attr -q -g eos-image-version / 2>/dev/null ) || true
+    if [ "${image_root}" != "" ]; then
+        image="${image_root}"
+    fi
+fi
 
-eval $(grep ^VERSION= /etc/os-release)
-release=${VERSION}
+release=$(cat /etc/os-release | grep ^VERSION= | head -n1 | awk -F= '{ print $2 }') || true
 
-if [ -d /sys/class/dmi/id ]; then
-    # do we want to do this? hmm...
-    #if [ "$vendor" == "LENOVO" ]; then
-    #  product_path="/sys/class/dmi/id/product_version"
-    #else
-    product_path="/sys/class/dmi/id/product_name"
-    #fi
-    
-    vendor=$(< /sys/class/dmi/id/sys_vendor) || vendor=''
-    product=$(< "$product_path" ) || product=''
-    serial=$(< /sys/class/dmi/id/product_serial) || serial=''
+vendor=""
+product=""
+serial=""
+if [ -d "/sys/class/dmi/id" ]; then
+    vendor=$(< /sys/class/dmi/id/sys_vendor) || true
+    product=$(< /sys/class/dmi/id/product_name ) || true
+    serial=$(< /sys/class/dmi/id/product_serial) || true
 else
-    compat=$(cut -d '' -f1 < /proc/device-tree/compatible) || compat=''
+    compat=$(cut -d '' -f1 < /proc/device-tree/compatible) || true
     vendor=$(echo ${compat} | cut -d, -f1)
     product=$(echo ${compat} | cut -d, -f2)
     serial=$(< /sys/class/endless_mfgdata/entries/SSN) || serial=''
 fi
 
+# trim whitespace from strings
 vendor="${vendor%"${vendor##*[![:space:]]}"}"
 product="${product%"${product##*[![:space:]]}"}"
 serial="${serial%"${serial##*[![:space:]]}"}"
 
-# FIXME implement actual detection here
-live=false
+# detect live system
+live="false"
+if grep -qw "endless.live" /proc/cmdline; then
+    image="true"
+fi
+
+# format as JSON
+vars="image release vendor product serial live"
+export ${vars}
+json="$(python -c 'import json, os, sys; print json.dumps(dict((v,os.environ[v]) for v in sys.argv[1:]))' ${vars})"
 
 # report in
-if ! out=$(wget -O - -q "$SCRIPT?image=$image&release=$release&vendor=$vendor&product=$product&serial=$serial&live=$live"); then
-    echo "wget failed"
+if ! out=$(wget -O - -q --method=PUT --body-data="${json}" "${SCRIPT}") ; then
+    echo "failed PUT to $SCRIPT with data: ${json}"
     exit 1
 fi
-if [ "$out" != "OK" ]; then
-    echo "invalid page"
+if ! ( echo "${out}" | python -c "import json, sys; sys.exit(0 if json.load(sys.stdin)['success'] == 'true' else 1)" 2>/dev/null ); then
+    echo "didn't get success from PUT to ${SCRIPT} with data: ${json}"
+    echo "got response: ${out}"
     exit 1
 fi
 
 # touch file to record activation
-: >$ACTIVATEDFILE
+echo > "${ACTIVATEDFILE}"
 
