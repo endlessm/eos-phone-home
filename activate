@@ -74,14 +74,19 @@ if grep -qw "endless.live" /proc/cmdline; then
     image="true"
 fi
 
+# format as JSON
+vars="image release vendor product serial live"
+export ${vars}
+json="$(python -c 'import json, os, sys; print json.dumps(dict((v,os.environ[v]) for v in sys.argv[1:]))' ${vars})"
+
 # report in
-URL="${SCRIPT}?image=${image}&release=${release}&vendor=${vendor}&product=${product}&serial=${serial}&live=${live}"
-if ! out=$(wget -O - -q "${URL}") ; then
-    echo "failed to wget url: ${URL}"
+if ! out=$(wget -O - -q --method=PUT --body-data="${json}" "${SCRIPT}") ; then
+    echo "failed PUT to $SCRIPT with data: ${json}"
     exit 1
 fi
-if [ "${out}" != "OK" ]; then
-    echo "didn't get OK from wget url: ${URL}"
+if ! ( echo "${out}" | python -c "import json, sys; sys.exit(0 if json.load(sys.stdin)['success'] == 'true' else 1)" 2>/dev/null ); then
+    echo "didn't get success from PUT to ${SCRIPT} with data: ${json}"
+    echo "got response: ${out}"
     exit 1
 fi
 
