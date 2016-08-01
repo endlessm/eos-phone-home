@@ -1,7 +1,9 @@
 #!/bin/sh -e
 
-if [ "${IFACE}" = "lo" ] || \
-   [ "${MODE}" != "start" ] || \
+ACTION=${2}
+
+if [ "${ACTION}" != "connectivity-change" ] || \
+   [ "x${CONNECTIVITY_STATE}" != "xFULL" ] || \
    [ -f /var/lib/eos-phone-home/activated ]; then
     exit 0
 fi
