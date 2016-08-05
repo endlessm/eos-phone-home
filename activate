@@ -1,95 +1,218 @@
-#!/bin/bash -e
-# This script sends a one-off activation message (on first boot-up) to
-# Endless, in order to discover how many Endless OS systems are started
-# across the world.
-# 
-# Note that this does not send any identifiable user data: it only transmits the
-# originally installed operating system version, the current version, the
-# machine vendor & product name. When the first activation message is sent, it
-# contains the machine serial number, but this is not sent again so cannot be
-# used for tracking purposes.
-# 
-# (C) 2014 Canonical Ltd.
-# (C) 2016 Endless Mobile Inc.
-# License: GPL v2 or later
+#!/usr/bin/env python3
 
-# https://home.endlessm.com/v1/activate
-# 
-# Arguments in the query string will be:
-# 
-#  image (the image name, from the xattr on /sysroot)
-#  release (from /etc/os-release)
-#  vendor (from DMI / device tree)
-#  product (from DMI / device tree)
-#  serial (from DMI / Endless mfgdata)
-#  live (true if this is a live USB, false if not)
+import json
+import os
+import re
+import subprocess
+import sys
+import urllib.request
 
-DIR="/var/lib/eos-phone-home"
-if [ ! -d "${DIR}" ] || [ ! -w "${DIR}" ]; then
-    echo "${DIR} missing or not writable"
-    exit 1
-fi
+class Activation(object):
+    ACTIVATION_ENDPOINT = os.getenv('EOS_PHONE_HOME_ACTIVATE_URL', "https://home.endlessm.com/v1/activate")
+    STATE_DIRECTORY = "/var/lib/eos-phone-home"
 
-# Give me a ping, Vasili. One ping only, please.
-ACTIVATEDFILE="${DIR}/activated"
-if [ -e "${ACTIVATEDFILE}" ]; then
-    echo "${ACTIVATEDFILE} exists, doing nothing"
-    exit 0
-fi
+    ACTIVATION_VARIABLES = { 'live': 'is_live',
+                             'image': 'image',
+                             'release': 'release',
+                             'vendor': 'vendor',
+                             'product': 'product',
+                             'serial': 'serial' }
 
-SCRIPT="${EOS_PHONE_HOME_ACTIVATE_URL:-https://home.endlessm.com/v1/activate}"
+    def _get_vendor(self):
+        vendor = None
 
-image=$(attr -q -g eos-image-version /sysroot 2>/dev/null ) || true
-if [ "${image}" != "" ]; then
-    image_root=$(attr -q -g eos-image-version / 2>/dev/null ) || true
-    if [ "${image_root}" != "" ]; then
-        image="${image_root}"
-    fi
-fi
+        try:
+            if os.path.isdir('/sys/class/dmi/id'):
+                with open('/sys/class/dmi/id/sys_vendor') as vendor_file:
+                    vendor = vendor_file.read().strip()
+            else:
+                dt_data = None
+                with open('/proc/device-tree/compatible') as dt_file:
+                    dt_data = dt_file.read().strip()
 
-release=$(cat /etc/os-release | grep ^VERSION= | head -n1 | awk -F= '{ print $2 }') || true
+                dt_fields = dt_data.split(',')
+                vendor = dt_fields[0]
+        except Exception as e:
+            print("Unable to get vendor name!", e, file=sys.stderr)
 
-vendor=""
-product=""
-serial=""
-if [ -d "/sys/class/dmi/id" ]; then
-    vendor=$(< /sys/class/dmi/id/sys_vendor) || true
-    product=$(< /sys/class/dmi/id/product_name ) || true
-    serial=$(< /sys/class/dmi/id/product_serial) || true
-else
-    compat=$(cut -d '' -f1 < /proc/device-tree/compatible) || true
-    vendor=$(echo ${compat} | cut -d, -f1)
-    product=$(echo ${compat} | cut -d, -f2)
-    serial=$(< /sys/class/endless_mfgdata/entries/SSN) || serial=''
-fi
+        print(" - Found vendor:", vendor)
 
-# trim whitespace from strings
-vendor="${vendor%"${vendor##*[![:space:]]}"}"
-product="${product%"${product##*[![:space:]]}"}"
-serial="${serial%"${serial##*[![:space:]]}"}"
+        return vendor.strip()
 
-# detect live system
-live="false"
-if grep -qw "endless.live" /proc/cmdline; then
-    image="true"
-fi
+    def _get_product(self):
+        product = None
 
-# format as JSON
-vars="image release vendor product serial live"
-export ${vars}
-json="$(python -c 'import json, os, sys; print json.dumps(dict((v,os.environ[v]) for v in sys.argv[1:]))' ${vars})"
+        try:
+            if os.path.isdir('/sys/class/dmi/id'):
+                with open('/sys/class/dmi/id/product_name') as product_file:
+                    product = product_file.read().strip()
+            else:
+                dt_data = None
+                with open('/proc/device-tree/compatible') as dt_file:
+                    dt_data = dt_file.read().strip()
 
-# report in
-if ! out=$(wget -O - -q --method=PUT --body-data="${json}" "${SCRIPT}") ; then
-    echo "failed PUT to $SCRIPT with data: ${json}"
-    exit 1
-fi
-if ! ( echo "${out}" | python -c "import json, sys; sys.exit(0 if json.load(sys.stdin)['success'] == 'true' else 1)" 2>/dev/null ); then
-    echo "didn't get success from PUT to ${SCRIPT} with data: ${json}"
-    echo "got response: ${out}"
-    exit 1
-fi
+                dt_fields = dt_data.split(',')
+                product = dt_fields[1]
+        except Exception as e:
+            print("Unable to get product name!", e, file=sys.stderr)
 
-# touch file to record activation
-echo > "${ACTIVATEDFILE}"
+        print(" - Found product:", product)
 
+        return product.strip()
+
+    def _get_image(self):
+        image = None
+
+        try:
+            image = subprocess.check_output(['attr', '-q', '-g', 'eos-image-version', '/sysroot']).strip()
+        except Exception as e:
+            print("Unable to get /sysroot image name!", e, file=sys.stderr)
+            return None
+
+        print(" - Image:", image)
+
+        if image != "":
+            try:
+                image_root = subprocess.check_output(['attr', '-q', '-g', 'eos-image-version', '/']).strip()
+            except Exception as e:
+                print("Unable to get / image name!", e, file=sys.stderr)
+                return image
+
+            print(" - Image root:", image_root)
+
+            if image_root != "":
+                return image_root
+            else:
+                image
+
+        return None
+
+    def _get_release(self):
+        release = None
+
+        try:
+            release_data = None
+            with open('/etc/os-release') as release_file:
+                release_data = release_file.read()
+
+            release_data = re.split("\n", release_data, flags=re.M)
+            for release_item in release_data:
+                release_item = release_item.strip()
+
+                key, value = release_item.split('=', 1)
+                if key == 'VERSION':
+                    print(' - Found version key')
+                    if value.startswith('"') and value.endswith('"'):
+                            value = value[1:-1]
+
+                    release = value
+                    print(' - Release:', release)
+                    return release
+
+        except Exception as e:
+            print("Unable to get release name!", e, file=sys.stderr)
+
+        return release.strip()
+
+    def _get_serial(self):
+        serial = None
+
+        try:
+            if os.path.isdir('/sys/class/dmi/id'):
+                with open('/sys/class/dmi/id/product_serial') as ssn_file:
+                    serial = ssn_file.read().strip()
+            else:
+                with open('/sys/class/endless_mfgdata/entries/SSN') as ssn_file:
+                    serial = ssn_file.read().strip()
+        except Exception as e:
+            print("Unable to get serial! Check that you're running this as root!", e, file=sys.stderr)
+
+        print(" - Found serial:", serial)
+
+        return serial.strip()
+
+    def _get_is_live(self):
+        is_live = False
+
+        command_line = None
+        with open('/proc/cmdline', 'r') as command_line_file:
+            command_line=command_line_file.read()
+
+        print(" - Cmdline:", command_line.strip())
+
+        if re.search(r'\bendless.live\b', command_line):
+            print(" - Found is_live marker. Marking as live image.")
+            is_live = True
+
+        return is_live
+
+    def _send_to_server(self, activation_data):
+        success = False
+        print("Sending data...")
+
+        try:
+            data = activation_data.encode('utf-8')
+
+            req = urllib.request.Request(self.ACTIVATION_ENDPOINT, data = data, method = 'PUT')
+            req.add_header('Content-Type', 'application/json')
+
+            response_data = None
+            with urllib.request.urlopen(req) as conn:
+                response_data = conn.read().decode('utf-8')
+
+            print('Response:', response_data)
+
+            response = json.loads(response_data)
+
+            if 'success' in response and \
+               response['success'] == True:
+                print("Server returned success message!")
+                success = True
+            else:
+                print("Server failed to process the data:", response)
+
+        except Exception as e:
+            print("Sending failed!", e, file=sys.stderr)
+
+        return success
+
+    def run(self):
+        if os.path.exists(os.path.join(self.STATE_DIRECTORY, 'activated')):
+            print("Already activated! Exiting!")
+            exit()
+
+        if not os.path.isdir(self.STATE_DIRECTORY):
+            print("State folder (%s) not found! Exiting!" % self.STATE_DIRECTORY, file=sys.stderr)
+            exit(1)
+
+        if not os.access(self.STATE_DIRECTORY, os.W_OK):
+            print("State folder (%s) not writable! Exiting!" % self.STATE_DIRECTORY, file=sys.stderr)
+            exit(1)
+
+        print("Endpoint:", self.ACTIVATION_ENDPOINT)
+
+        activation = {}
+        for activation_var, activation_getter in self.ACTIVATION_VARIABLES.items():
+            print("Getting activation variable:", activation_var)
+            activation[activation_var] = getattr(self, '_get_' + activation_getter)()
+            if activation[activation_var] == None or \
+               activation[activation_var] == "":
+                activation[activation_var] = "unknown"
+
+        activation_data = json.dumps(activation)
+        print("Activation data:", activation_data)
+
+        print("Sending to server (%s)..." % self.ACTIVATION_ENDPOINT)
+
+        if self._send_to_server(activation_data):
+            # We're done, mark us ad complete
+            with open(os.path.join(self.STATE_DIRECTORY, 'activated'), 'w'):
+                pass
+
+            print("Activated!")
+        else:
+            print("Could not send activation data to server! Exiting!", file=sys.stderr)
+            exit(1)
+
+if __name__ == '__main__':
+    Activation().run()
