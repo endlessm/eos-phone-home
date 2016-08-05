@@ -27,7 +27,14 @@
 DIR="/var/lib/eos-phone-home"
 if [ ! -d "${DIR}" ] || [ ! -w "${DIR}" ]; then
     echo "${DIR} missing or not writable"
-    exit 1
+
+    if [ "$EUID" == "0" ]; then
+      echo "Making ${dir}"
+      mkdir -p /var/lib/eos-phone-home
+    else
+      echo "Not root user so we can't even create the folder. Exiting."
+      exit 1
+    fi
 fi
 
 # Give me a ping, Vasili. One ping only, please.
