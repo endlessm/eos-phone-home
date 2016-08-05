@@ -85,10 +85,20 @@ if grep -qw "endless.live" /proc/cmdline; then
     live="true"
 fi
 
-# format as JSON
-vars="image release vendor product serial live"
-export ${vars}
-json="$(python -c 'import json, os, sys; print json.dumps(dict((v,os.environ[v]) for v in sys.argv[1:]))' ${vars})"
+# Format as JSON
+json=$(python << "END"
+import json, os, sys
+activation={}
+for activation_var in ["image", "release", "vendor", "product", "serial"]:
+    activation[activation_var] = os.environ[activation_var]
+
+activation["live"] = os.environ["live"] == "true"
+
+print json.dumps(activation)
+END
+)
+
+echo "Sending: ${json}"
 
 # report in
 if ! out=$(wget -O - -q --method=PUT --body-data="${json}" "${SCRIPT}") ; then
