@@ -54,7 +54,11 @@ if [ "${image}" != "" ]; then
     fi
 fi
 
-release=$(cat /etc/os-release | grep ^VERSION= | head -n1 | awk -F= '{ print $2 }') || true
+if [ "${image}" == "" ]; then
+  image="unknown"
+fi
+
+release=$(cat /etc/os-release | grep ^VERSION= | head -n1 | awk -F= '{ print $2 }' | sed -e 's/^"//'  -e 's/"$//') || true
 
 vendor=""
 product=""
