@@ -82,7 +82,7 @@ serial="${serial%"${serial##*[![:space:]]}"}"
 # detect live system
 live="false"
 if grep -qw "endless.live" /proc/cmdline; then
-    image="true"
+    live="true"
 fi
 
 # format as JSON
