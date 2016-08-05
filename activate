@@ -105,7 +105,7 @@ if ! out=$(wget -O - -q --method=PUT --body-data="${json}" "${SCRIPT}") ; then
     echo "failed PUT to $SCRIPT with data: ${json}"
     exit 1
 fi
-if ! ( echo "${out}" | python -c "import json, sys; sys.exit(0 if json.load(sys.stdin)['success'] == 'true' else 1)" 2>/dev/null ); then
+if ! ( echo "${out}" | python -c "import json, sys; sys.exit(0 if json.load(sys.stdin)['success'] == True else 1)" 2>/dev/null ); then
     echo "didn't get success from PUT to ${SCRIPT} with data: ${json}"
     echo "got response: ${out}"
     exit 1
@@ -113,4 +113,3 @@ fi
 
 # touch file to record activation
 echo > "${ACTIVATEDFILE}"
-
