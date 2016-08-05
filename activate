@@ -27,7 +27,14 @@
 DIR="/var/lib/eos-phone-home"
 if [ ! -d "${DIR}" ] || [ ! -w "${DIR}" ]; then
     echo "${DIR} missing or not writable"
-    exit 1
+
+    if [ "$EUID" == "0" ]; then
+      echo "Making ${dir}"
+      mkdir -p /var/lib/eos-phone-home
+    else
+      echo "Not root user so we can't even create the folder. Exiting."
+      exit 1
+    fi
 fi
 
 # Give me a ping, Vasili. One ping only, please.
@@ -47,7 +54,11 @@ if [ "${image}" != "" ]; then
     fi
 fi
 
-release=$(cat /etc/os-release | grep ^VERSION= | head -n1 | awk -F= '{ print $2 }') || true
+if [ "${image}" == "" ]; then
+  image="unknown"
+fi
+
+release=$(cat /etc/os-release | grep ^VERSION= | head -n1 | awk -F= '{ print $2 }' | sed -e 's/^"//'  -e 's/"$//') || true
 
 vendor=""
 product=""
@@ -71,20 +82,41 @@ serial="${serial%"${serial##*[![:space:]]}"}"
 # detect live system
 live="false"
 if grep -qw "endless.live" /proc/cmdline; then
-    image="true"
+    live="true"
 fi
 
-# format as JSON
-vars="image release vendor product serial live"
-export ${vars}
-json="$(python -c 'import json, os, sys; print json.dumps(dict((v,os.environ[v]) for v in sys.argv[1:]))' ${vars})"
+
+# We don't want dummy serials sent
+if [ "${serial}" == "To be filled by O.E.M." ]; then
+  unset serial
+fi
+
+# Export vars for python
+export image release vendor product serial live
+
+# Convert to json
+json=$(python << END
+import json, os, sys
+
+activation={}
+for activation_var in ["image", "release", "vendor", "product", "serial"]:
+    if activation_var in os.environ:
+        activation[activation_var] = os.environ[activation_var]
+
+activation["live"] = os.environ["live"] == "true"
+
+print json.dumps(activation)
+END
+)
+
+echo "Sending: ${json}"
 
 # report in
 if ! out=$(wget -O - -q --method=PUT --body-data="${json}" "${SCRIPT}") ; then
     echo "failed PUT to $SCRIPT with data: ${json}"
     exit 1
 fi
-if ! ( echo "${out}" | python -c "import json, sys; sys.exit(0 if json.load(sys.stdin)['success'] == 'true' else 1)" 2>/dev/null ); then
+if ! ( echo "${out}" | python -c "import json, sys; sys.exit(0 if json.load(sys.stdin)['success'] == True else 1)" 2>/dev/null ); then
     echo "didn't get success from PUT to ${SCRIPT} with data: ${json}"
     echo "got response: ${out}"
     exit 1
@@ -92,4 +124,3 @@ fi
 
 # touch file to record activation
 echo > "${ACTIVATEDFILE}"
-
