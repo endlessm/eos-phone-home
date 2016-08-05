@@ -85,12 +85,23 @@ if grep -qw "endless.live" /proc/cmdline; then
     live="true"
 fi
 
-# Format as JSON
-json=$(python << "END"
+
+# We don't want dummy serials sent
+if [ "${serial}" == "To be filled by O.E.M." ]; then
+  unset serial
+fi
+
+# Export vars for python
+export image release vendor product serial live
+
+# Convert to json
+json=$(python << END
 import json, os, sys
+
 activation={}
 for activation_var in ["image", "release", "vendor", "product", "serial"]:
-    activation[activation_var] = os.environ[activation_var]
+    if activation_var in os.environ:
+        activation[activation_var] = os.environ[activation_var]
 
 activation["live"] = os.environ["live"] == "true"
 
