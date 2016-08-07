@@ -63,27 +63,14 @@ class Activation(object):
     def _get_image(self):
         image = None
 
-        try:
-            image = subprocess.check_output(['attr', '-q', '-g', 'eos-image-version', '/sysroot']).strip()
-        except Exception as e:
-            print("Unable to get /sysroot image name!", e, file=sys.stderr)
-            return None
-
-        print(" - Image:", image)
-
-        if image != "":
+        for path in ['/sysroot', '/']:
             try:
-                image_root = subprocess.check_output(['attr', '-q', '-g', 'eos-image-version', '/']).strip()
-            except Exception as e:
-                print("Unable to get / image name!", e, file=sys.stderr)
+                image = subprocess.check_output(['attr', '-q', '-g', 'eos-image-version', path])
+                image = image.decode(errors='replace').strip()
+                print(" - Image from %s: %s" % (path, image))
                 return image
-
-            print(" - Image root:", image_root)
-
-            if image_root != "":
-                return image_root
-            else:
-                image
+            except Exception as e:
+                print("Unable to get %s image name!" % (path, ), e, file=sys.stderr)
 
         return None
 
