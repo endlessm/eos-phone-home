@@ -1,6 +1,7 @@
 [Unit]
 Description=Send system activation to Endless
 Wants=network.target
+ConditionPathExists!=/var/lib/eos-phone-home/activated
 
 [Service]
 Type=simple
