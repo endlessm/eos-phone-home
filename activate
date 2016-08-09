@@ -44,6 +44,20 @@ class Activation(object):
     def __init__(self, is_debug):
         self._debug = is_debug
 
+    # XXX: This is not a regular file - it returns multiple vendor/product
+    #      lines that are NUL delimited
+    def _get_dt_info(self):
+        dt_data = None
+        # XXX: Used for testing due to the odd spec
+        #with open('test_data/compatible') as dt_file:
+        with open('/proc/device-tree/compatible') as dt_file:
+            dt_data = dt_file.read().split('\0')[0]
+
+        if self._debug:
+            print("DT data:", dt_data)
+
+        return dt_data
+
     def _get_vendor(self):
         vendor = None
 
@@ -52,10 +66,7 @@ class Activation(object):
                 with open('/sys/class/dmi/id/sys_vendor') as vendor_file:
                     vendor = vendor_file.read().strip()
             else:
-                dt_data = None
-                with open('/proc/device-tree/compatible') as dt_file:
-                    dt_data = dt_file.read().strip()
-
+                dt_data = self._get_dt_info()
                 dt_fields = dt_data.split(',')
                 vendor = dt_fields[0]
         except Exception as e:
@@ -76,10 +87,7 @@ class Activation(object):
                 with open('/sys/class/dmi/id/product_name') as product_file:
                     product = product_file.read().strip()
             else:
-                dt_data = None
-                with open('/proc/device-tree/compatible') as dt_file:
-                    dt_data = dt_file.read().strip()
-
+                dt_data = self._get_dt_info()
                 dt_fields = dt_data.split(',')
                 product = dt_fields[1]
         except Exception as e:
