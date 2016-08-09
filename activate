@@ -41,6 +41,9 @@ class Activation(object):
                              'product': 'product',
                              'serial': 'serial' }
 
+    def __init__(self, is_debug):
+        self._debug = is_debug
+
     def _get_vendor(self):
         vendor = None
 
@@ -60,7 +63,10 @@ class Activation(object):
 
         print(" - Found vendor:", vendor)
 
-        return vendor.strip()
+        if vendor:
+            vendor = vendor.strip()
+
+        return vendor
 
     def _get_product(self):
         product = None
@@ -81,7 +87,10 @@ class Activation(object):
 
         print(" - Found product:", product)
 
-        return product.strip()
+        if product:
+            product = product.strip()
+
+        return product
 
     def _get_image(self):
         image = None
@@ -90,6 +99,7 @@ class Activation(object):
             try:
                 image = subprocess.check_output(['attr', '-q', '-g', 'eos-image-version', path])
                 image = image.decode(errors='replace').strip()
+
                 print(" - Image from %s: %s" % (path, image))
                 return image
             except Exception as e:
@@ -122,7 +132,10 @@ class Activation(object):
         except Exception as e:
             print("Unable to get release name!", e, file=sys.stderr)
 
-        return release.strip()
+        if release:
+            release = release.strip()
+
+        return release
 
     def _get_serial(self):
         serial = None
@@ -139,7 +152,10 @@ class Activation(object):
 
         print(" - Found serial:", serial)
 
-        return serial.strip()
+        if serial:
+            serial = serial.strip()
+
+        return serial
 
     def _get_is_live(self):
         is_live = False
@@ -148,7 +164,10 @@ class Activation(object):
         with open('/proc/cmdline', 'r') as command_line_file:
             command_line=command_line_file.read()
 
-        print(" - Cmdline:", command_line.strip())
+        if command_line:
+            command_line = command_line.strip()
+
+        print(" - Cmdline:", command_line)
 
         if re.search(r'\bendless.live\b', command_line):
             print(" - Found is_live marker. Marking as live image.")
@@ -213,9 +232,12 @@ class Activation(object):
         print("Activation data:", activation_data)
 
         print("Sending to server (%s)..." % self.ACTIVATION_ENDPOINT)
+        if self._debug:
+            print("Debugging turned on so nothing is going to be sent to server!")
+            exit()
 
         if self._send_to_server(activation_data):
-            # We're done, mark us ad complete
+            # We're done, mark us activated
             with open(os.path.join(self.STATE_DIRECTORY, 'activated'), 'w'):
                 pass
 
@@ -225,4 +247,10 @@ class Activation(object):
             exit(1)
 
 if __name__ == '__main__':
-    Activation().run()
+    # XXX: Too simple of a script to use argparse (for now)
+    is_debug = False
+    if os.getenv('DEBUG', 'false') == 'true':
+        print("Debugging turned on!")
+        is_debug = True
+
+    Activation(is_debug).run()
