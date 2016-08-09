@@ -123,8 +123,7 @@ class Activation(object):
             with open('/etc/os-release') as release_file:
                 release_data = release_file.read()
 
-            release_data = re.split("\n", release_data, flags=re.M)
-            for release_item in release_data:
+            for release_item in release_data.splitlines():
                 release_item = release_item.strip()
 
                 key, value = release_item.split('=', 1)
