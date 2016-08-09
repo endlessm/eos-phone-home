@@ -1,5 +1,27 @@
 #!/usr/bin/env python3
 
+# This script sends a one-off activation message to Endless in order for us
+# to know how many EOS systems are used across the globe. Note that this
+# does not send any identifiable user data - it only transmits the originally
+# installed operating system version, the OS version, machine vendor, and
+# the product name. When the first activation message is sent, it contains
+# the machine serial number but this is not sent again so cannot be used for
+# tracking purposes and server logs are neither used for association nor
+# are they kept beyond what is needed for IT administration support.
+#
+# (C) 2016 Endless Mobile Inc.
+# License: GPL v2 or later
+#
+# https://home.endlessm.com/v1/activate
+#
+# Arguments in the query string will be:
+#  image (the image name, from the xattr on /sysroot)
+#  release (from /etc/os-release)
+#  vendor (from DMI / device tree)
+#  product (from DMI / device tree)
+#  serial (from DMI / Endless mfgdata)
+#  live (true if this is a live USB, false if not)
+
 import json
 import os
 import re
@@ -8,7 +30,8 @@ import sys
 import urllib.request
 
 class Activation(object):
-    ACTIVATION_ENDPOINT = os.getenv('EOS_PHONE_HOME_ACTIVATE_URL', "https://home.endlessm.com/v1/activate")
+    ACTIVATION_ENDPOINT = os.getenv('EOS_PHONE_HOME_ACTIVATE_URL',
+                                    "https://home.endlessm.com/v1/activate")
     STATE_DIRECTORY = "/var/lib/eos-phone-home"
 
     ACTIVATION_VARIABLES = { 'live': 'is_live',
