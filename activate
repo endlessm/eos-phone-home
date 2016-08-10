@@ -176,7 +176,7 @@ class Activation(object):
 
         print(" - Cmdline:", command_line)
 
-        if re.search(r'\bendless.live\b', command_line):
+        if re.search(r'\bendless.live_boot\b', command_line):
             print(" - Found is_live marker. Marking as live image.")
             is_live = True
 
