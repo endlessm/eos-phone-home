@@ -1,8 +1,7 @@
 [Unit]
-Description=Send system activation to Endless
+Description=Send system activation/daily ping messages to Endless
 Wants=network.target
-ConditionPathExists!=/var/lib/eos-phone-home/activated
 
 [Service]
 Type=simple
-ExecStart=/usr/lib/eos-phone-home/activate
+ExecStart=/usr/lib/eos-phone-home/eos-phone-home
