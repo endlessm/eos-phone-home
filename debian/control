@@ -9,7 +9,7 @@ Vcs-Git: https://github.com/endlessm/eos-phone-home.git
 Package: eos-phone-home
 Architecture: all
 Depends: wget, python, ${misc:Depends}
-Description: send "I am alive" ping to Endless
+Description: send system activation/dailt ping messages to Endless
  This package installs a periodic systemd timer to send a one-off activation
  message (on first boot-up) and a daily ping to Endless, in order to discover
  how many Endless OS systems are started and how many remain active across the
