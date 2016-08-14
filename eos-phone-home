@@ -1,55 +1,82 @@
 #!/usr/bin/env python3
-
-# This script sends a one-off activation message to Endless in order for us
-# to know how many EOS systems are used across the globe. Note that this
-# does not send any identifiable user data - it only transmits the originally
-# installed operating system version, the OS version, machine vendor, and
-# the product name. When the first activation message is sent, it contains
-# the machine serial number but this is not sent again so cannot be used for
-# tracking purposes and server logs are neither used for association nor
-# are they kept beyond what is needed for IT administration support.
+#
+# This script sends anonymous messages to Endless in order for us to know how
+# many EOS systems are used across the globe. Note that this does not send any
+# identifiable user data - it only transmits the originally installed operating
+# system version, the OS version, machine vendor, and the product name. GeoIP
+# is used to find the approximate location of the system, but beyond this
+# server logs are neither used for association nor are they kept beyond what
+# is needed for IT administration support.
+#
+# The first type of message is an "activation", which is sent only once per
+# system. In addition to the above data, it contains the machine serial number
+# number but as this is only sent once, it cannot be used for tracking
+# purposes over time.
+#
+# The second type of message is a "ping", which is sent at most once per 24
+# hours. In addition to the above data, it contains a counter of how many
+# times the machine has successfully pinged the Endless server before, which
+# allows us to count the number of active installations over time.
+#
+# Thanks for Canonical for their description and implementation of this
+# technique, respectively:
+#  - http://theravingrick.blogspot.co.uk/2010/08/can-we-count-users-without-uniquely.html
+#  - https://launchpad.net/canonical-poke
 #
 # (C) 2016 Endless Mobile Inc.
 # License: GPL v2 or later
 #
 # https://home.endlessm.com/v1/activate
 #
-# Arguments in the query string will be:
+# Arguments in the JSON PUT string will be:
 #  image (the image name, from the xattr on /sysroot)
 #  release (from /etc/os-release)
 #  vendor (from DMI / device tree)
 #  product (from DMI / device tree)
 #  serial (from DMI / Endless mfgdata)
 #  live (true if this is a live USB, false if not)
+#
+# https://home.endlessm.com/v1/ping
+#
+# Arguments in the JSON PUT string will be:
+#  image (the image name, from the xattr on /sysroot)
+#  release (from /etc/os-release)
+#  vendor (from DMI / device tree)
+#  product (from DMI / device tree)
+#  count (from counter file, incremented each successful ping)
 
 import json
 import os
 import re
 import subprocess
 import sys
+import time
 import urllib.request
 
-class Activation(object):
-    ACTIVATION_ENDPOINT = os.getenv('EOS_PHONE_HOME_ACTIVATE_URL',
-                                    "https://home.endlessm.com/v1/activate")
+
+class PhoneHome(object):
     STATE_DIRECTORY = "/var/lib/eos-phone-home"
 
-    ACTIVATION_VARIABLES = { 'live': 'is_live',
-                             'image': 'image',
-                             'release': 'release',
-                             'vendor': 'vendor',
-                             'product': 'product',
-                             'serial': 'serial' }
+    ACTIVATION_ENDPOINT = os.getenv('EOS_PHONE_HOME_ACTIVATE_URL',
+                                    "https://home.endlessm.com/v1/activate")
+    ACTIVATION_VARIABLES = ['live', 'image', 'release',
+                            'vendor', 'product', 'serial']
+
+    PING_ENDPOINT = os.getenv('EOS_PHONE_HOME_PING_URL',
+                              "https://home.endlessm.com/v1/ping")
+    PING_VARIABLES = ['image', 'release', 'vendor', 'product', 'count']
 
     def __init__(self, is_debug):
         self._debug = is_debug
+        self._variables = {}
 
     # XXX: This is not a regular file - it returns multiple vendor/product
     #      lines that are NUL delimited
     def _get_dt_info(self):
         dt_data = None
+
         # XXX: Used for testing due to the odd spec
-        #with open('test_data/compatible') as dt_file:
+        # with open('test_data/compatible') as dt_file:
         with open('/proc/device-tree/compatible') as dt_file:
             dt_data = dt_file.read().split('\0')[0]
 
@@ -105,13 +132,15 @@ class Activation(object):
 
         for path in ['/sysroot', '/']:
             try:
-                image = subprocess.check_output(['attr', '-q', '-g', 'eos-image-version', path])
+                image = subprocess.check_output(
+                            ['attr', '-q', '-g', 'eos-image-version', path])
                 image = image.decode(errors='replace').strip()
 
                 print(" - Image from %s: %s" % (path, image))
                 return image
             except Exception as e:
-                print("Unable to get %s image name!" % (path, ), e, file=sys.stderr)
+                print("Unable to get %s image name!" % (path, ), e,
+                      file=sys.stderr)
 
         return None
 
@@ -152,10 +181,12 @@ class Activation(object):
                 with open('/sys/class/dmi/id/product_serial') as ssn_file:
                     serial = ssn_file.read().strip()
             else:
-                with open('/sys/class/endless_mfgdata/entries/SSN') as ssn_file:
+                with open('/sys/class/endless_mfgdata/entries/SSN') \
+                  as ssn_file:
                     serial = ssn_file.read().strip()
         except Exception as e:
-            print("Unable to get serial! Check that you're running this as root!", e, file=sys.stderr)
+            print("Unable to get serial! Check that you're running as root!",
+                  e, file=sys.stderr)
 
         print(" - Found serial:", serial)
 
@@ -164,12 +195,12 @@ class Activation(object):
 
         return serial
 
-    def _get_is_live(self):
-        is_live = False
+    def _get_live(self):
+        live = False
 
         command_line = None
         with open('/proc/cmdline', 'r') as command_line_file:
-            command_line=command_line_file.read()
+            command_line = command_line_file.read()
 
         if command_line:
             command_line = command_line.strip()
@@ -177,19 +208,72 @@ class Activation(object):
         print(" - Cmdline:", command_line)
 
         if re.search(r'\bendless.live_boot\b', command_line):
-            print(" - Found is_live marker. Marking as live image.")
-            is_live = True
+            print(" - Found live marker. Marking as live image.")
+            live = True
 
-        return is_live
+        return live
 
-    def _send_to_server(self, activation_data):
-        success = False
-        print("Sending data...")
+    def _get_count(self):
+        count = None
 
         try:
-            data = activation_data.encode('utf-8')
+            with open(os.path.join(self.STATE_DIRECTORY, 'count'), 'r') \
+              as count_file:
+                count_data = count_file.read()
 
-            req = urllib.request.Request(self.ACTIVATION_ENDPOINT, data = data, method = 'PUT')
+                if count_data:
+                    count = int(count_data.strip())
+
+            print(" - Count:", count)
+        except Exception as e:
+            print("Unable to get count!", e, file=sys.stderr)
+
+        return count
+
+    def _set_count(self, count):
+        try:
+            with open(os.path.join(self.STATE_DIRECTORY, 'count'), 'w') \
+              as count_file:
+                count_file.write("%d" % count)
+
+            self._variables['count'] = count
+
+            print(" - Updated count:", count)
+        except Exception as e:
+            print("Unable to set count!", e, file=sys.stderr)
+
+    def _get_var(self, name):
+        if name not in self._variables:
+            print("Getting variable:", name)
+            var = getattr(self, '_get_' + name)()
+
+            if var is None or var == '':
+                var = "unknown"
+
+            self._variables[name] = var
+
+        return self._variables[name]
+
+    def _send_to_server(self, endpoint, variables):
+        request = {}
+        for name in variables:
+            request[name] = self._get_var(name)
+
+        request_data = json.dumps(request)
+        print("Request data:", request_data)
+
+        print("Sending to server (%s)..." % endpoint)
+
+        if self._debug:
+            print("Debugging turned on so nothing sent to server!")
+            return True
+
+        success = False
+
+        try:
+            data = request_data.encode('utf-8')
+
+            req = urllib.request.Request(endpoint, data=data, method='PUT')
             req.add_header('Content-Type', 'application/json')
 
             response_data = None
@@ -212,45 +296,96 @@ class Activation(object):
 
         return success
 
-    def run(self):
-        if os.path.exists(os.path.join(self.STATE_DIRECTORY, 'activated')):
-            print("Already activated! Exiting!")
-            exit()
+    def _need_activate(self):
+        return not os.path.exists(os.path.join(self.STATE_DIRECTORY,
+                                               'activated'))
 
-        if not os.path.isdir(self.STATE_DIRECTORY):
-            print("State folder (%s) not found! Exiting!" % self.STATE_DIRECTORY, file=sys.stderr)
-            exit(1)
-
-        if not os.access(self.STATE_DIRECTORY, os.W_OK):
-            print("State folder (%s) not writable! Exiting!" % self.STATE_DIRECTORY, file=sys.stderr)
-            exit(1)
-
-        print("Endpoint:", self.ACTIVATION_ENDPOINT)
-
-        activation = {}
-        for activation_var, activation_getter in self.ACTIVATION_VARIABLES.items():
-            print("Getting activation variable:", activation_var)
-            activation[activation_var] = getattr(self, '_get_' + activation_getter)()
-            if activation[activation_var] == None or \
-               activation[activation_var] == "":
-                activation[activation_var] = "unknown"
-
-        activation_data = json.dumps(activation)
-        print("Activation data:", activation_data)
-
-        print("Sending to server (%s)..." % self.ACTIVATION_ENDPOINT)
-        if self._debug:
-            print("Debugging turned on so nothing is going to be sent to server!")
-            exit()
-
-        if self._send_to_server(activation_data):
+    def _do_activate(self):
+        if self._send_to_server(self.ACTIVATION_ENDPOINT,
+                                self.ACTIVATION_VARIABLES):
             # We're done, mark us activated
             with open(os.path.join(self.STATE_DIRECTORY, 'activated'), 'w'):
                 pass
 
             print("Activated!")
         else:
-            print("Could not send activation data to server! Exiting!", file=sys.stderr)
+            print("Could not send activation data to server!", file=sys.stderr)
+
+            return False
+
+        return True
+
+    def _need_ping(self):
+        if self._get_var('live'):
+            print("Not sending ping from live system.")
+            return False
+
+        if not os.path.exists(os.path.join(self.STATE_DIRECTORY, 'count')):
+            print("Creating new count file!")
+            self._set_count(0)
+            return True
+
+        count_time = os.path.getmtime(os.path.join(self.STATE_DIRECTORY,
+                                                   'count'))
+        count_age = time.time() - count_time
+        print("Count age:", count_age)
+
+        if count_age < 0:
+            print("Clock has gone backwards? Resetting time so we will ping \
+              again in 24 hours.")
+
+            count = self._get_var('count')
+            self._set_count(count)
+
+            return False
+
+        # we aim to ping daily
+        return count_age >= (60 * 60 * 24)
+
+    def _do_ping(self):
+        if self._send_to_server(self.PING_ENDPOINT, self.PING_VARIABLES):
+            # increment the counter upon successful ping only
+            count = self._get_var('count')
+            self._set_count(count + 1)
+
+            print("Pinged!")
+        else:
+            print("Could not send ping to server!", file=sys.stderr)
+
+            return False
+
+        return True
+
+    def run(self):
+        if not os.path.isdir(self.STATE_DIRECTORY):
+            print("State folder (%s) not found! Exiting!" %
+                  self.STATE_DIRECTORY, file=sys.stderr)
+            exit(1)
+
+        if not os.access(self.STATE_DIRECTORY, os.W_OK):
+            print("State folder (%s) not writable! Exiting!" %
+                  self.STATE_DIRECTORY, file=sys.stderr)
+            exit(1)
+
+        success = True
+
+        if self._need_activate():
+            print("Activation needed.")
+            if not self._do_activate():
+                success = False
+        else:
+            print("Already activated!")
+
+        if self._need_ping():
+            print("Ping needed.")
+            if not self._do_ping():
+                success = False
+        else:
+            print("Ping not due yet.")
+
+        if success:
+            exit(0)
+        else:
             exit(1)
 
 if __name__ == '__main__':
@@ -260,4 +395,4 @@ if __name__ == '__main__':
         print("Debugging turned on!")
         is_debug = True
 
-    Activation(is_debug).run()
+    PhoneHome(is_debug).run()
