@@ -214,15 +214,15 @@ class PhoneHome(object):
         return live
 
     def _get_count(self):
-        count = None
+        count = 0
 
         try:
             with open(os.path.join(self.STATE_DIRECTORY, 'count'), 'r') \
               as count_file:
                 count_data = count_file.read()
 
-                if count_data:
-                    count = int(count_data.strip())
+            if count_data:
+                count = int(count_data.strip())
 
             print(" - Count:", count)
         except Exception as e:
@@ -242,7 +242,9 @@ class PhoneHome(object):
         except Exception as e:
             print("Unable to set count!", e, file=sys.stderr)
 
-    def _get_var(self, name):
+            raise
+
+    def _lookup_or_get_variable(self, name):
         if name not in self._variables:
             print("Getting variable:", name)
             var = getattr(self, '_get_' + name)()
@@ -257,7 +259,7 @@ class PhoneHome(object):
     def _send_to_server(self, endpoint, variables):
         request = {}
         for name in variables:
-            request[name] = self._get_var(name)
+            request[name] = self._lookup_or_get_variable(name)
 
         request_data = json.dumps(request)
         print("Request data:", request_data)
@@ -296,7 +298,7 @@ class PhoneHome(object):
 
         return success
 
-    def _need_activate(self):
+    def _need_to_activate(self):
         return not os.path.exists(os.path.join(self.STATE_DIRECTORY,
                                                'activated'))
 
@@ -315,8 +317,8 @@ class PhoneHome(object):
 
         return True
 
-    def _need_ping(self):
-        if self._get_var('live'):
+    def _need_to_ping(self):
+        if self._lookup_or_get_variable('live'):
             print("Not sending ping from live system.")
             return False
 
@@ -331,21 +333,23 @@ class PhoneHome(object):
         print("Count age:", count_age)
 
         if count_age < 0:
-            print("Clock has gone backwards? Resetting time so we will ping \
-              again in 24 hours.")
+            print("Clock has gone backwards? Resetting time so we will ping",
+              "again in 24 hours.")
 
-            count = self._get_var('count')
+            count = self._lookup_or_get_variable('count')
             self._set_count(count)
 
             return False
 
         # we aim to ping daily
-        return count_age >= (60 * 60 * 24)
+        DAY_IN_SECONDS = 60 * 60 * 24
+        return count_age >= DAY_IN_SECONDS
 
     def _do_ping(self):
         if self._send_to_server(self.PING_ENDPOINT, self.PING_VARIABLES):
             # increment the counter upon successful ping only
-            count = self._get_var('count')
+            count = self._lookup_or_get_variable('count')
+
             self._set_count(count + 1)
 
             print("Pinged!")
@@ -369,19 +373,23 @@ class PhoneHome(object):
 
         success = True
 
-        if self._need_activate():
-            print("Activation needed.")
-            if not self._do_activate():
-                success = False
-        else:
-            print("Already activated!")
+        try:
+            if self._need_to_activate():
+                print("Activation needed.")
+                if not self._do_activate():
+                    success = False
+            else:
+                print("Already activated!")
 
-        if self._need_ping():
-            print("Ping needed.")
-            if not self._do_ping():
-                success = False
-        else:
-            print("Ping not due yet.")
+            if self._need_to_ping():
+                print("Ping needed.")
+                if not self._do_ping():
+                    success = False
+            else:
+                print("Ping not due yet.")
+        except Exception as e:
+            print("Unhandled exception:", e, file=sys.stderr)
+            success = False
 
         if success:
             exit(0)
