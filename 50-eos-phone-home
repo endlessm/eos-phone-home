@@ -3,11 +3,11 @@
 ACTION=${2}
 
 if [ "${ACTION}" != "connectivity-change" ] || \
-   [ "x${CONNECTIVITY_STATE}" != "xFULL" ] || \
-   [ -f /var/lib/eos-phone-home/activated ]; then
+   [ "${CONNECTIVITY_STATE}" != "FULL" ]; then
     exit 0
 fi
 
-/bin/systemctl --no-block start eos-phone-home.service
+# start after 1-2 minutes (AccuracySec defaults to 1min) to allow ntp to sync
+/bin/systemd-run --no-block --on-active=2m --unit=eos-phone-home.service
 
 exit 0

@@ -1,11 +1,10 @@
 [Unit]
-Description=Send system activation to Endless
+Description=Send system activation/daily ping messages to Endless
 Wants=network.target
-ConditionPathExists!=/var/lib/eos-phone-home/activated
 
 [Timer]
 OnBootSec=15m
-OnUnitInactiveSec=6h
+OnUnitInactiveSec=3h
 AccuracySec=30m
 
 [Install]
