@@ -8,6 +8,8 @@ if [ "${ACTION}" != "connectivity-change" ] || \
 fi
 
 # start after 1-2 minutes (AccuracySec defaults to 1min) to allow ntp to sync
-/bin/systemd-run --no-block --on-active=2m --unit=eos-phone-home.service
+# we can't use --unit=eos-phone-home.service here because eos-phone-home.timer already exists
+# starting via systemd also ensures only one instance of the script is running
+/bin/systemd-run --no-block --on-active=2m -- /bin/systemctl --no-block start eos-phone-home.service
 
 exit 0
