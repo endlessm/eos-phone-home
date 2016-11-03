@@ -35,6 +35,7 @@
 #  product (from DMI / device tree)
 #  serial (from DMI / Endless mfgdata)
 #  live (true if this is a live USB, false if not)
+#  dualboot (true if this is a dual boot installation, false if not)
 #
 # https://home.endlessm.com/v1/ping
 #
@@ -44,6 +45,7 @@
 #  vendor (from DMI / device tree)
 #  product (from DMI / device tree)
 #  count (from counter file, incremented each successful ping)
+#  dualboot (true if this is a dual boot installation, false if not)
 
 import argparse
 import json
@@ -60,12 +62,12 @@ class PhoneHome(object):
 
     ACTIVATION_ENDPOINT = os.getenv('EOS_PHONE_HOME_ACTIVATE_URL',
                                     "https://home.endlessm.com/v1/activate")
-    ACTIVATION_VARIABLES = ['live', 'image', 'release',
+    ACTIVATION_VARIABLES = ['dualboot', 'live', 'image', 'release',
                             'vendor', 'product', 'serial']
 
     PING_ENDPOINT = os.getenv('EOS_PHONE_HOME_PING_URL',
                               "https://home.endlessm.com/v1/ping")
-    PING_VARIABLES = ['image', 'release', 'vendor', 'product', 'count']
+    PING_VARIABLES = ['dualboot', 'image', 'release', 'vendor', 'product', 'count']
 
     def __init__(self, is_debug, force):
         self._debug = is_debug
@@ -197,23 +199,37 @@ class PhoneHome(object):
 
         return serial
 
+    def _get_cmdline(self):
+        with open('/proc/cmdline', 'r') as command_line_file:
+            command_line = command_line_file.read().strip()
+
+        print(" - Cmdline:", command_line)
+        return command_line
+
     def _get_live(self):
         live = False
 
-        command_line = None
-        with open('/proc/cmdline', 'r') as command_line_file:
-            command_line = command_line_file.read()
-
-        if command_line:
-            command_line = command_line.strip()
-
-        print(" - Cmdline:", command_line)
+        command_line = self._lookup_or_get_variable('cmdline')
 
         if re.search(r'\bendless.live_boot\b', command_line):
             print(" - Found live marker. Marking as live image.")
             live = True
 
         return live
+
+    def _get_dualboot(self):
+        command_line = self._lookup_or_get_variable('cmdline')
+        live = self._lookup_or_get_variable('live')
+
+        # In theory, one could be image-booted without endless.live_boot from a
+        # USB if you go in and delete the 'live' flag file, but this is not a
+        # supported configuration.
+        if not live and re.search(r'\bendless.image.device\b', command_line):
+            print(" - Found endless.image.device marker and no live marker. "
+                  "Marking as dual-boot.")
+            return True
+
+        return False
 
     def _get_count(self):
         count = 0
