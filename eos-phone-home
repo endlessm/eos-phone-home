@@ -404,10 +404,12 @@ class PhoneHome(object):
 
     def _do_ping(self):
         if self._send_to_server(self.PING_ENDPOINT, self.PING_VARIABLES):
-            # increment the counter upon successful ping only
-            count = self._lookup_or_get_variable('count')
-
-            self._set_count(count + 1)
+            if self._debug:
+                print("Debugging turned on so not incrementing count.")
+            else:
+                # increment the counter upon successful ping only
+                count = self._lookup_or_get_variable('count')
+                self._set_count(count + 1)
 
             print("Pinged!")
         else:
