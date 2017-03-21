@@ -103,7 +103,7 @@ class PhoneHome(object):
                 with open('/sys/class/dmi/id/sys_vendor') as vendor_file:
                     vendor = vendor_file.read().strip()
             else:
-                dt_data = self._get_dt_info()
+                dt_data = self._lookup_or_get_variable('dt_info')
                 dt_fields = dt_data.split(',')
                 vendor = dt_fields[0]
         except Exception as e:
@@ -124,7 +124,7 @@ class PhoneHome(object):
                 with open('/sys/class/dmi/id/product_name') as product_file:
                     product = product_file.read().strip()
             else:
-                dt_data = self._get_dt_info()
+                dt_data = self._lookup_or_get_variable('dt_info')
                 dt_fields = dt_data.split(',')
                 product = dt_fields[1]
         except Exception as e:
