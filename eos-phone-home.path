@@ -2,7 +2,9 @@
 Description=Send system activation/daily ping messages to Endless
 Wants=network.target
 
-[Timer]
-OnActiveSec=0
-OnUnitInactiveSec=3h
-AccuracySec=30m
+[Path]
+DirectoryNotEmpty=/home
+Unit=eos-phone-home.timer
+
+[Install]
+WantedBy=multi-user.target
