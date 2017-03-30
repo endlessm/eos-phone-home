@@ -1,6 +1,7 @@
 [Unit]
 Description=Send system activation/daily ping messages to Endless
 Wants=network.target
+ConditionDirectoryNotEmpty=/home
 
 [Service]
 Type=simple

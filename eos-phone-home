@@ -3,10 +3,11 @@
 # This script sends anonymous messages to Endless in order for us to know how
 # many EOS systems are used across the globe. Note that this does not send any
 # identifiable user data - it only transmits the originally installed operating
-# system version, the OS version, machine vendor, and the product name. GeoIP
-# is used to find the approximate location of the system, but beyond this
-# server logs are neither used for association nor are they kept beyond what
-# is needed for IT administration support.
+# system version, the OS version, machine vendor, the product name, and whether
+# the more detailed OS metrics system is enabled (for sanity-checking the two
+# systems). GeoIP is used to find the approximate location of the system, but
+# beyond this server logs are neither used for association nor are they kept
+# beyond what is needed for IT administration support.
 #
 # The first type of message is an "activation", which is sent only once per
 # system. In addition to the above data, it contains the machine serial number
@@ -23,7 +24,7 @@
 #  - http://theravingrick.blogspot.co.uk/2010/08/can-we-count-users-without-uniquely.html
 #  - https://launchpad.net/canonical-poke
 #
-# (C) 2016 Endless Mobile Inc.
+# (C) 2016,2017 Endless Mobile Inc.
 # License: GPL v2 or later
 #
 # https://home.endlessm.com/v1/activate
@@ -46,8 +47,12 @@
 #  product (from DMI / device tree)
 #  count (from counter file, incremented each successful ping)
 #  dualboot (true if this is a dual boot installation, false if not)
+#  metrics_enabled (true if metrics are being collected and uploaded)
+#  metrics_environment ("production", "dev" or "test")
 
 import argparse
+import collections
+import configparser
 import json
 import os
 import re
@@ -67,7 +72,8 @@ class PhoneHome(object):
 
     PING_ENDPOINT = os.getenv('EOS_PHONE_HOME_PING_URL',
                               "https://home.endlessm.com/v1/ping")
-    PING_VARIABLES = ['dualboot', 'image', 'release', 'vendor', 'product', 'count']
+    PING_VARIABLES = ['dualboot', 'image', 'release', 'vendor', 'product',
+                      'count', 'metrics_enabled', 'metrics_environment']
 
     def __init__(self, is_debug, force):
         self._debug = is_debug
@@ -97,7 +103,7 @@ class PhoneHome(object):
                 with open('/sys/class/dmi/id/sys_vendor') as vendor_file:
                     vendor = vendor_file.read().strip()
             else:
-                dt_data = self._get_dt_info()
+                dt_data = self._lookup_or_get_variable('dt_info')
                 dt_fields = dt_data.split(',')
                 vendor = dt_fields[0]
         except Exception as e:
@@ -118,7 +124,7 @@ class PhoneHome(object):
                 with open('/sys/class/dmi/id/product_name') as product_file:
                     product = product_file.read().strip()
             else:
-                dt_data = self._get_dt_info()
+                dt_data = self._lookup_or_get_variable('dt_info')
                 dt_fields = dt_data.split(',')
                 product = dt_fields[1]
         except Exception as e:
@@ -147,6 +153,39 @@ class PhoneHome(object):
                       file=sys.stderr)
 
         return None
+
+    def _get_metrics(self):
+        permissions_file = '/etc/metrics/eos-metrics-permissions.conf'
+
+        enabled = False
+        uploading_enabled = False
+        environment = 'unknown'
+
+        try:
+            config = configparser.ConfigParser()
+            config.read(permissions_file)
+            enabled = config['global'].getboolean('enabled', enabled)
+            uploading_enabled = config['global'].getboolean('uploading_enabled',
+                uploading_enabled)
+            environment = config['global'].get('environment', environment)
+        except Exception as e:
+            print("Unable to read %s, assuming fallback values." %
+                (permissions_file, ), e, file=sys.stderr)
+
+        environment = environment[:16]
+
+        Metrics = collections.namedtuple('Metrics', 'enabled environment')
+        return Metrics(enabled and uploading_enabled, environment)
+
+    def _get_metrics_enabled(self):
+        enabled = self._lookup_or_get_variable('metrics').enabled
+        print(' - Metrics enabled:', enabled)
+        return enabled
+
+    def _get_metrics_environment(self):
+        environment = self._lookup_or_get_variable('metrics').environment
+        print(' - Metrics environment:', environment)
+        return environment
 
     def _get_release(self):
         release = None
@@ -365,10 +404,12 @@ class PhoneHome(object):
 
     def _do_ping(self):
         if self._send_to_server(self.PING_ENDPOINT, self.PING_VARIABLES):
-            # increment the counter upon successful ping only
-            count = self._lookup_or_get_variable('count')
-
-            self._set_count(count + 1)
+            if self._debug:
+                print("Debugging turned on so not incrementing count.")
+            else:
+                # increment the counter upon successful ping only
+                count = self._lookup_or_get_variable('count')
+                self._set_count(count + 1)
 
             print("Pinged!")
         else:
