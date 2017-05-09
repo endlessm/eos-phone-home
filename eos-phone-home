@@ -282,11 +282,13 @@ class PhoneHome(object):
 
             if count_data:
                 count = int(count_data.strip())
-
-            print(" - Count:", count)
+        except FileNotFoundError:
+            pass
         except Exception as e:
             print("Unable to get count!", e, file=sys.stderr)
+            return 0
 
+        print(" - Count:", count)
         return count
 
     def _set_count(self, count):
@@ -379,12 +381,12 @@ class PhoneHome(object):
             print("Not sending ping from live system.")
             return False
 
-        if not os.path.exists(self._count_path):
-            print("Creating new count file!")
-            self._set_count(0)
+        try:
+            count_time = os.path.getmtime(self._count_path)
+        except FileNotFoundError:
+            print("%s doesn't exist yet" % self._count_path)
             return True
 
-        count_time = os.path.getmtime(self._count_path)
         count_age = time.time() - count_time
         print("Count age:", count_age)
 
