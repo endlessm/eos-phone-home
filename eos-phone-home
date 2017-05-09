@@ -80,6 +80,9 @@ class PhoneHome(object):
         self._force = force
         self._variables = {}
 
+        self._activated_path = os.path.join(self.STATE_DIRECTORY, 'activated')
+        self._count_path = os.path.join(self.STATE_DIRECTORY, 'count')
+
     # XXX: This is not a regular file - it returns multiple vendor/product
     #      lines that are NUL delimited
     def _get_dt_info(self):
@@ -274,8 +277,7 @@ class PhoneHome(object):
         count = 0
 
         try:
-            with open(os.path.join(self.STATE_DIRECTORY, 'count'), 'r') \
-              as count_file:
+            with open(self._count_path, 'r') as count_file:
                 count_data = count_file.read()
 
             if count_data:
@@ -289,8 +291,7 @@ class PhoneHome(object):
 
     def _set_count(self, count):
         try:
-            with open(os.path.join(self.STATE_DIRECTORY, 'count'), 'w') \
-              as count_file:
+            with open(self._count_path, 'w') as count_file:
                 count_file.write("%d" % count)
 
             self._variables['count'] = count
@@ -356,14 +357,13 @@ class PhoneHome(object):
         return success
 
     def _need_to_activate(self):
-        return not os.path.exists(os.path.join(self.STATE_DIRECTORY,
-                                               'activated'))
+        return not os.path.exists(self._activated_path)
 
     def _do_activate(self):
         if self._send_to_server(self.ACTIVATION_ENDPOINT,
                                 self.ACTIVATION_VARIABLES):
             # We're done, mark us activated
-            with open(os.path.join(self.STATE_DIRECTORY, 'activated'), 'w'):
+            with open(self._activated_path, 'w'):
                 pass
 
             print("Activated!")
@@ -379,13 +379,12 @@ class PhoneHome(object):
             print("Not sending ping from live system.")
             return False
 
-        if not os.path.exists(os.path.join(self.STATE_DIRECTORY, 'count')):
+        if not os.path.exists(self._count_path):
             print("Creating new count file!")
             self._set_count(0)
             return True
 
-        count_time = os.path.getmtime(os.path.join(self.STATE_DIRECTORY,
-                                                   'count'))
+        count_time = os.path.getmtime(self._count_path)
         count_age = time.time() - count_time
         print("Count age:", count_age)
 
