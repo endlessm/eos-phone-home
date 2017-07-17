@@ -420,7 +420,7 @@ class PhoneHome(object):
 
         return True
 
-    def run(self):
+    def run(self, exit_on_server_error):
         if not os.path.isdir(self.STATE_DIRECTORY):
             log.critical("State folder (%s) not found! Exiting!",
                          self.STATE_DIRECTORY)
@@ -451,9 +451,7 @@ class PhoneHome(object):
             log.exception("Unhandled exception:")
             exit(1)
 
-        if success:
-            exit(0)
-        else:
+        if not success and exit_on_server_error:
             exit(1)
 
 
@@ -463,6 +461,9 @@ def main():
                    help='verbose output; disables any actual phoning home')
     p.add_argument('--force', action='store_true',
                    help='always collect data (implies --debug)')
+    p.add_argument('--exit-on-server-error', action='store_true',
+                   help='exit with a non-0 status if activation and/or ping '
+                        "can't be sent to the server")
 
     args = p.parse_args()
     is_debug = args.debug or args.force
@@ -472,7 +473,7 @@ def main():
     else:
         level = logging.INFO
     logging.basicConfig(level=level)
-    PhoneHome(is_debug, args.force).run()
+    PhoneHome(is_debug, args.force).run(args.exit_on_server_error)
 
 
 if __name__ == '__main__':
