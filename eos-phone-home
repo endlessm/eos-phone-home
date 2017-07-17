@@ -449,14 +449,15 @@ class PhoneHome(object):
                 log.info("Ping not due yet.")
         except:
             log.exception("Unhandled exception:")
-            success = False
+            exit(1)
 
         if success:
             exit(0)
         else:
             exit(1)
 
-if __name__ == '__main__':
+
+def main():
     p = argparse.ArgumentParser()
     p.add_argument('--debug', action='store_true',
                    help='verbose output; disables any actual phoning home')
@@ -472,3 +473,7 @@ if __name__ == '__main__':
         level = logging.INFO
     logging.basicConfig(level=level)
     PhoneHome(is_debug, args.force).run()
+
+
+if __name__ == '__main__':
+    main()
