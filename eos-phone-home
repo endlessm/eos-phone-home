@@ -53,13 +53,13 @@
 import argparse
 import collections
 import configparser
-import json
 import logging
 import os
 import re
 import subprocess
 import time
-import urllib.request
+
+import requests
 
 
 log = logging.getLogger(__name__)
@@ -321,9 +321,7 @@ class PhoneHome(object):
         for name in variables:
             request[name] = self._lookup_or_get_variable(name)
 
-        request_data = json.dumps(request)
-        log.info("Request data: %s", request_data)
-
+        log.info("Request data: %s", request)
         log.info("Sending to server (%s)...", endpoint)
 
         if self._debug:
@@ -331,25 +329,20 @@ class PhoneHome(object):
             return True
 
         try:
-            data = request_data.encode('utf-8')
-
-            req = urllib.request.Request(endpoint, data=data, method='PUT')
-            req.add_header('Content-Type', 'application/json')
-
-            response_data = None
-            with urllib.request.urlopen(req) as conn:
-                response_data = conn.read().decode('utf-8')
+            resp = requests.put(endpoint, json=request)
+            resp.raise_for_status()
         except Exception as e:
             log.warning("Sending failed! %s", e)
             return False
 
-        log.info('Response: %s', response_data)
         try:
-            response = json.loads(response_data)
+            response = resp.json()
         except ValueError as e:
             # TODO: json.JSONDecodeError when we ship Python >= 3.5
-            log.warning("Failed to parse response: %s", e)
+            log.warning("Failed to parse response %r: %s", resp.content, e)
             return False
+
+        log.info('Response: %s', response)
 
         if response.get('success') is True:
             log.info("Server returned success message!")
