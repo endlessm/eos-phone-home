@@ -53,13 +53,16 @@
 import argparse
 import collections
 import configparser
-import json
+import logging
 import os
 import re
 import subprocess
-import sys
 import time
-import urllib.request
+
+import requests
+
+
+log = logging.getLogger(__name__)
 
 
 class PhoneHome(object):
@@ -93,8 +96,7 @@ class PhoneHome(object):
         with open('/proc/device-tree/compatible') as dt_file:
             dt_data = dt_file.read().split('\0')[0]
 
-        if self._debug:
-            print("DT data:", dt_data)
+        log.debug("DT data: %s", dt_data)
 
         return dt_data
 
@@ -109,10 +111,10 @@ class PhoneHome(object):
                 dt_data = self._lookup_or_get_variable('dt_info')
                 dt_fields = dt_data.split(',')
                 vendor = dt_fields[0]
-        except Exception as e:
-            print("Unable to get vendor name!", e, file=sys.stderr)
+        except:
+            log.exception("Unable to get vendor name!")
 
-        print(" - Found vendor:", vendor)
+        log.info(" - Found vendor: %s", vendor)
 
         if vendor:
             vendor = vendor.strip()
@@ -130,10 +132,10 @@ class PhoneHome(object):
                 dt_data = self._lookup_or_get_variable('dt_info')
                 dt_fields = dt_data.split(',')
                 product = dt_fields[1]
-        except Exception as e:
-            print("Unable to get product name!", e, file=sys.stderr)
+        except:
+            log.exception("Unable to get product name!")
 
-        print(" - Found product:", product)
+        log.info(" - Found product: %s", product)
 
         if product:
             product = product.strip()
@@ -149,11 +151,10 @@ class PhoneHome(object):
                             ['attr', '-q', '-g', 'eos-image-version', path])
                 image = image.decode(errors='replace').strip()
 
-                print(" - Image from %s: %s" % (path, image))
+                log.info(" - Image from %s: %s", path, image)
                 return image
-            except Exception as e:
-                print("Unable to get %s image name!" % (path, ), e,
-                      file=sys.stderr)
+            except subprocess.CalledProcessError:
+                log.info("Unable to get image name from %s", path)
 
         return None
 
@@ -171,9 +172,9 @@ class PhoneHome(object):
             uploading_enabled = config['global'].getboolean('uploading_enabled',
                 uploading_enabled)
             environment = config['global'].get('environment', environment)
-        except Exception as e:
-            print("Unable to read %s, assuming fallback values." %
-                (permissions_file, ), e, file=sys.stderr)
+        except:
+            log.exception("Unable to read %s, assuming fallback values.",
+                          permissions_file)
 
         environment = environment[:16]
 
@@ -182,12 +183,12 @@ class PhoneHome(object):
 
     def _get_metrics_enabled(self):
         enabled = self._lookup_or_get_variable('metrics').enabled
-        print(' - Metrics enabled:', enabled)
+        log.info(' - Metrics enabled: %s', enabled)
         return enabled
 
     def _get_metrics_environment(self):
         environment = self._lookup_or_get_variable('metrics').environment
-        print(' - Metrics environment:', environment)
+        log.info(' - Metrics environment: %s', environment)
         return environment
 
     def _get_release(self):
@@ -203,16 +204,16 @@ class PhoneHome(object):
 
                 key, value = release_item.split('=', 1)
                 if key == 'VERSION':
-                    print(' - Found version key')
+                    log.info(' - Found version key')
                     if value.startswith('"') and value.endswith('"'):
                             value = value[1:-1]
 
                     release = value
-                    print(' - Release:', release)
+                    log.info(' - Release: %s', release)
                     return release
 
-        except Exception as e:
-            print("Unable to get release name!", e, file=sys.stderr)
+        except:
+            log.exception("Unable to get release name!")
 
         if release:
             release = release.strip()
@@ -230,11 +231,10 @@ class PhoneHome(object):
                 with open('/sys/class/endless_mfgdata/entries/SSN') \
                   as ssn_file:
                     serial = ssn_file.read().strip()
-        except Exception as e:
-            print("Unable to get serial! Check that you're running as root!",
-                  e, file=sys.stderr)
+        except:
+            log.exception("Unable to get serial! Check that you're running as root!")
 
-        print(" - Found serial:", serial)
+        log.info(" - Found serial: %s", serial)
 
         if serial:
             serial = serial.strip()
@@ -245,7 +245,7 @@ class PhoneHome(object):
         with open('/proc/cmdline', 'r') as command_line_file:
             command_line = command_line_file.read().strip()
 
-        print(" - Cmdline:", command_line)
+        log.info(" - Cmdline: %s", command_line)
         return command_line
 
     def _get_live(self):
@@ -254,7 +254,7 @@ class PhoneHome(object):
         command_line = self._lookup_or_get_variable('cmdline')
 
         if re.search(r'\bendless.live_boot\b', command_line):
-            print(" - Found live marker. Marking as live image.")
+            log.info(" - Found live marker. Marking as live image.")
             live = True
 
         return live
@@ -267,8 +267,8 @@ class PhoneHome(object):
         # USB if you go in and delete the 'live' flag file, but this is not a
         # supported configuration.
         if not live and re.search(r'\bendless.image.device\b', command_line):
-            print(" - Found endless.image.device marker and no live marker. "
-                  "Marking as dual-boot.")
+            log.info(" - Found endless.image.device marker and no live marker."
+                     " Marking as dual-boot.")
             return True
 
         return False
@@ -284,11 +284,11 @@ class PhoneHome(object):
                 count = int(count_data.strip())
         except FileNotFoundError:
             pass
-        except Exception as e:
-            print("Unable to get count!", e, file=sys.stderr)
+        except:
+            log.exception("Unable to get count!")
             return 0
 
-        print(" - Count:", count)
+        log.info(" - Count: %d", count)
         return count
 
     def _set_count(self, count):
@@ -298,15 +298,15 @@ class PhoneHome(object):
 
             self._variables['count'] = count
 
-            print(" - Updated count:", count)
-        except Exception as e:
-            print("Unable to set count!", e, file=sys.stderr)
+            log.info(" - Updated count: %d", count)
+        except:
+            log.exception("Unable to set count!")
 
             raise
 
     def _lookup_or_get_variable(self, name):
         if name not in self._variables:
-            print("Getting variable:", name)
+            log.info("Getting variable: %s", name)
             var = getattr(self, '_get_' + name)()
 
             if var is None or var == '':
@@ -321,42 +321,35 @@ class PhoneHome(object):
         for name in variables:
             request[name] = self._lookup_or_get_variable(name)
 
-        request_data = json.dumps(request)
-        print("Request data:", request_data)
-
-        print("Sending to server (%s)..." % endpoint)
+        log.info("Request data: %s", request)
+        log.info("Sending to server (%s)...", endpoint)
 
         if self._debug:
-            print("Debugging turned on so nothing sent to server!")
+            log.info("Debugging turned on so nothing sent to server!")
             return True
 
-        success = False
+        try:
+            resp = requests.put(endpoint, json=request)
+            resp.raise_for_status()
+        except Exception as e:
+            log.warning("Sending failed! %s", e)
+            return False
 
         try:
-            data = request_data.encode('utf-8')
+            response = resp.json()
+        except ValueError as e:
+            # TODO: json.JSONDecodeError when we ship Python >= 3.5
+            log.warning("Failed to parse response %r: %s", resp.content, e)
+            return False
 
-            req = urllib.request.Request(endpoint, data=data, method='PUT')
-            req.add_header('Content-Type', 'application/json')
+        log.info('Response: %s', response)
 
-            response_data = None
-            with urllib.request.urlopen(req) as conn:
-                response_data = conn.read().decode('utf-8')
-
-            print('Response:', response_data)
-
-            response = json.loads(response_data)
-
-            if 'success' in response and \
-               response['success'] == True:
-                print("Server returned success message!")
-                success = True
-            else:
-                print("Server failed to process the data:", response)
-
-        except Exception as e:
-            print("Sending failed!", e, file=sys.stderr)
-
-        return success
+        if response.get('success') is True:
+            log.info("Server returned success message!")
+            return True
+        else:
+            log.info("Server failed to process the data: %s", response)
+            return False
 
     def _need_to_activate(self):
         return not os.path.exists(self._activated_path)
@@ -368,9 +361,9 @@ class PhoneHome(object):
             with open(self._activated_path, 'w'):
                 pass
 
-            print("Activated!")
+            log.info("Activated!")
         else:
-            print("Could not send activation data to server!", file=sys.stderr)
+            log.warning("Could not send activation data to server!")
 
             return False
 
@@ -378,21 +371,21 @@ class PhoneHome(object):
 
     def _need_to_ping(self):
         if self._lookup_or_get_variable('live'):
-            print("Not sending ping from live system.")
+            log.info("Not sending ping from live system.")
             return False
 
         try:
             count_time = os.path.getmtime(self._count_path)
         except FileNotFoundError:
-            print("%s doesn't exist yet" % self._count_path)
+            log.info("%s doesn't exist yet", self._count_path)
             return True
 
         count_age = time.time() - count_time
-        print("Count age:", count_age)
+        log.info("Count age: %s", count_age)
 
         if count_age < 0:
-            print("Clock has gone backwards? Resetting time so we will ping",
-              "again in 24 hours.")
+            log.info("Clock has gone backwards? Resetting time so we will "
+                     "ping again in 24 hours.")
 
             count = self._lookup_or_get_variable('count')
             self._set_count(count)
@@ -406,66 +399,75 @@ class PhoneHome(object):
     def _do_ping(self):
         if self._send_to_server(self.PING_ENDPOINT, self.PING_VARIABLES):
             if self._debug:
-                print("Debugging turned on so not incrementing count.")
+                log.info("Debugging turned on so not incrementing count.")
             else:
                 # increment the counter upon successful ping only
                 count = self._lookup_or_get_variable('count')
                 self._set_count(count + 1)
 
-            print("Pinged!")
+            log.info("Pinged!")
         else:
-            print("Could not send ping to server!", file=sys.stderr)
+            log.warning("Could not send ping to server!")
 
             return False
 
         return True
 
-    def run(self):
+    def run(self, exit_on_server_error):
         if not os.path.isdir(self.STATE_DIRECTORY):
-            print("State folder (%s) not found! Exiting!" %
-                  self.STATE_DIRECTORY, file=sys.stderr)
+            log.critical("State folder (%s) not found! Exiting!",
+                         self.STATE_DIRECTORY)
             exit(1)
 
         if not os.access(self.STATE_DIRECTORY, os.W_OK):
-            print("State folder (%s) not writable! Exiting!" %
-                  self.STATE_DIRECTORY, file=sys.stderr)
+            log.critical("State folder (%s) not writable! Exiting!",
+                         self.STATE_DIRECTORY)
             exit(1)
 
         success = True
 
         try:
             if self._force or self._need_to_activate():
-                print("Activation needed.")
+                log.info("Activation needed.")
                 if not self._do_activate():
                     success = False
             else:
-                print("Already activated!")
+                log.info("Already activated!")
 
             if self._force or self._need_to_ping():
-                print("Ping needed.")
+                log.info("Ping needed.")
                 if not self._do_ping():
                     success = False
             else:
-                print("Ping not due yet.")
-        except Exception as e:
-            print("Unhandled exception:", e, file=sys.stderr)
-            success = False
-
-        if success:
-            exit(0)
-        else:
+                log.info("Ping not due yet.")
+        except:
+            log.exception("Unhandled exception:")
             exit(1)
 
-if __name__ == '__main__':
+        if not success and exit_on_server_error:
+            exit(1)
+
+
+def main():
     p = argparse.ArgumentParser()
     p.add_argument('--debug', action='store_true',
                    help='verbose output; disables any actual phoning home')
     p.add_argument('--force', action='store_true',
                    help='always collect data (implies --debug)')
+    p.add_argument('--exit-on-server-error', action='store_true',
+                   help='exit with a non-0 status if activation and/or ping '
+                        "can't be sent to the server")
 
     args = p.parse_args()
     is_debug = args.debug or args.force
     if is_debug:
-        print("Debugging turned on!")
+        log.info("Debugging turned on!")
+        level = logging.DEBUG
+    else:
+        level = logging.INFO
+    logging.basicConfig(level=level)
+    PhoneHome(is_debug, args.force).run(args.exit_on_server_error)
 
-    PhoneHome(is_debug, args.force).run()
+
+if __name__ == '__main__':
+    main()
