@@ -70,13 +70,17 @@ class PhoneHome(object):
 
     ACTIVATION_ENDPOINT = os.getenv('EOS_PHONE_HOME_ACTIVATE_URL',
                                     "https://home.endlessm.com/v1/activate")
-    ACTIVATION_VARIABLES = ['dualboot', 'live', 'image', 'release',
-                            'vendor', 'product', 'serial']
+    ACTIVATION_VARIABLES = ('dualboot', 'live', 'image', 'release', 'vendor',
+                            'product', 'serial')
 
     PING_ENDPOINT = os.getenv('EOS_PHONE_HOME_PING_URL',
                               "https://home.endlessm.com/v1/ping")
-    PING_VARIABLES = ['dualboot', 'image', 'release', 'vendor', 'product',
-                      'count', 'metrics_enabled', 'metrics_environment']
+    PING_VARIABLES = ('dualboot', 'image', 'release', 'vendor', 'product',
+                      'count', 'metrics_enabled', 'metrics_environment')
+
+    # variables which should be replaced with "unknown" rather
+    # than omitted if the get function returns None
+    MANDATORY_STRINGS = ('image', 'vendor', 'product', 'release')
 
     def __init__(self, is_debug, force):
         self._debug = is_debug
@@ -309,7 +313,7 @@ class PhoneHome(object):
             log.info("Getting variable: %s", name)
             var = getattr(self, '_get_' + name)()
 
-            if var is None or var == '':
+            if name in self.MANDATORY_STRINGS and not var:
                 var = "unknown"
 
             self._variables[name] = var
@@ -319,7 +323,9 @@ class PhoneHome(object):
     def _send_to_server(self, endpoint, variables):
         request = {}
         for name in variables:
-            request[name] = self._lookup_or_get_variable(name)
+            val = self._lookup_or_get_variable(name)
+            if val:
+                request[name] = val
 
         log.info("Request data: %s", request)
         log.info("Sending to server (%s)...", endpoint)
