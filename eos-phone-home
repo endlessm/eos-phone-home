@@ -156,8 +156,8 @@ class PhoneHome(object):
 
         for path in ['/sysroot', '/']:
             try:
-                image = subprocess.check_output(
-                            ['attr', '-q', '-g', 'eos-image-version', path])
+                image = subprocess.check_output(['attr', '-q', '-g',
+                                                 'eos-image-version', path])
                 image = image.decode(errors='replace').strip()
 
                 log.info(" - Image from %s: %s", path, image)
@@ -179,7 +179,7 @@ class PhoneHome(object):
             config.read(permissions_file)
             enabled = config['global'].getboolean('enabled', enabled)
             uploading_enabled = config['global'].getboolean('uploading_enabled',
-                uploading_enabled)
+                                                            uploading_enabled)
             environment = config['global'].get('environment', environment)
         except:
             log.exception("Unable to read %s, assuming fallback values.",
@@ -215,7 +215,7 @@ class PhoneHome(object):
                 if key == 'VERSION':
                     log.info(' - Found version key')
                     if value.startswith('"') and value.endswith('"'):
-                            value = value[1:-1]
+                        value = value[1:-1]
 
                     release = value
                     log.info(' - Release: %s', release)
@@ -238,10 +238,11 @@ class PhoneHome(object):
                     serial = ssn_file.read().strip()
             else:
                 with open('/sys/class/endless_mfgdata/entries/SSN') \
-                  as ssn_file:
+                        as ssn_file:
                     serial = ssn_file.read().strip()
         except:
-            log.exception("Unable to get serial! Check that you're running as root!")
+            log.exception("Unable to get serial! Check that you're running "
+                          "as root!")
 
         log.info(" - Found serial: %s", serial)
 
