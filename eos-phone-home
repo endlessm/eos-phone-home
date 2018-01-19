@@ -11,8 +11,10 @@
 #
 # The first type of message is an "activation", which is sent only once per
 # system. In addition to the above data, it contains the machine serial number
-# number but as this is only sent once, it cannot be used for tracking
-# purposes over time.
+# number and a hash of the MAC address of the first non-removable ethernet
+# or wireless network adapter, as some vendors do not set the serial number
+# correctly/uniquely. As the serial and MAC hash is only sent once, it cannot
+# be used for tracking purposes over time.
 #
 # The second type of message is a "ping", which is sent at most once per 24
 # hours. In addition to the above data, it contains a counter of how many
@@ -37,6 +39,8 @@
 #  serial (from DMI / Endless mfgdata)
 #  live (true if this is a live USB, false if not)
 #  dualboot (true if this is a dual boot installation, false if not)
+#  mac_hash (ADLER32 hash of first non-removable ethernet or wireless
+#            interface MAC address)
 #
 # https://home.endlessm.com/v1/ping
 #
@@ -54,13 +58,14 @@ import argparse
 import collections
 import configparser
 import logging
+import glob
 import os
 import re
 import subprocess
 import time
+import zlib
 
 import requests
-
 
 log = logging.getLogger(__name__)
 
@@ -70,13 +75,17 @@ class PhoneHome(object):
 
     ACTIVATION_ENDPOINT = os.getenv('EOS_PHONE_HOME_ACTIVATE_URL',
                                     "https://home.endlessm.com/v1/activate")
-    ACTIVATION_VARIABLES = ['dualboot', 'live', 'image', 'release',
-                            'vendor', 'product', 'serial']
+    ACTIVATION_VARIABLES = ('dualboot', 'live', 'image', 'release', 'vendor',
+                            'product', 'serial', 'mac_hash')
 
     PING_ENDPOINT = os.getenv('EOS_PHONE_HOME_PING_URL',
                               "https://home.endlessm.com/v1/ping")
-    PING_VARIABLES = ['dualboot', 'image', 'release', 'vendor', 'product',
-                      'count', 'metrics_enabled', 'metrics_environment']
+    PING_VARIABLES = ('dualboot', 'image', 'release', 'vendor', 'product',
+                      'count', 'metrics_enabled', 'metrics_environment')
+
+    # variables which should be replaced with "unknown" rather
+    # than omitted if the get function returns None
+    MANDATORY_STRINGS = ('image', 'vendor', 'product', 'release')
 
     def __init__(self, is_debug, force):
         self._debug = is_debug
@@ -111,7 +120,7 @@ class PhoneHome(object):
                 dt_data = self._lookup_or_get_variable('dt_info')
                 dt_fields = dt_data.split(',')
                 vendor = dt_fields[0]
-        except:
+        except Exception:
             log.exception("Unable to get vendor name!")
 
         log.info(" - Found vendor: %s", vendor)
@@ -132,7 +141,7 @@ class PhoneHome(object):
                 dt_data = self._lookup_or_get_variable('dt_info')
                 dt_fields = dt_data.split(',')
                 product = dt_fields[1]
-        except:
+        except Exception:
             log.exception("Unable to get product name!")
 
         log.info(" - Found product: %s", product)
@@ -147,11 +156,12 @@ class PhoneHome(object):
 
         for path in ['/sysroot', '/']:
             try:
-                image = subprocess.check_output(
-                            ['attr', '-q', '-g', 'eos-image-version', path])
+                image = subprocess.check_output(['attr', '-q', '-g',
+                                                 'eos-image-version', path])
                 image = image.decode(errors='replace').strip()
 
                 log.info(" - Image from %s: %s", path, image)
+
                 return image
             except subprocess.CalledProcessError:
                 log.info("Unable to get image name from %s", path)
@@ -170,9 +180,9 @@ class PhoneHome(object):
             config.read(permissions_file)
             enabled = config['global'].getboolean('enabled', enabled)
             uploading_enabled = config['global'].getboolean('uploading_enabled',
-                uploading_enabled)
+                                                            uploading_enabled)
             environment = config['global'].get('environment', environment)
-        except:
+        except Exception:
             log.exception("Unable to read %s, assuming fallback values.",
                           permissions_file)
 
@@ -192,8 +202,6 @@ class PhoneHome(object):
         return environment
 
     def _get_release(self):
-        release = None
-
         try:
             release_data = None
             with open('/etc/os-release') as release_file:
@@ -205,20 +213,20 @@ class PhoneHome(object):
                 key, value = release_item.split('=', 1)
                 if key == 'VERSION':
                     log.info(' - Found version key')
-                    if value.startswith('"') and value.endswith('"'):
-                            value = value[1:-1]
 
-                    release = value
+                    if value.startswith('"') and value.endswith('"'):
+                        value = value[1:-1]
+
+                    release = value.strip()
+
                     log.info(' - Release: %s', release)
+
                     return release
 
-        except:
+        except Exception:
             log.exception("Unable to get release name!")
 
-        if release:
-            release = release.strip()
-
-        return release
+        return None
 
     def _get_serial(self):
         serial = None
@@ -229,10 +237,11 @@ class PhoneHome(object):
                     serial = ssn_file.read().strip()
             else:
                 with open('/sys/class/endless_mfgdata/entries/SSN') \
-                  as ssn_file:
+                        as ssn_file:
                     serial = ssn_file.read().strip()
-        except:
-            log.exception("Unable to get serial! Check that you're running as root!")
+        except Exception:
+            log.exception("Unable to get serial! Check that you're running "
+                          "as root!")
 
         log.info(" - Found serial: %s", serial)
 
@@ -273,6 +282,55 @@ class PhoneHome(object):
 
         return False
 
+    def _get_mac_hash(self):
+        try:
+            eth_ifaces = []
+            wlan_ifaces = []
+
+            for iface in glob.glob('/sys/class/net/*'):
+                # skip virtual interfaces
+                device = os.path.join(iface, 'device')
+                if not os.path.exists(device):
+                    continue
+
+                # skip USB devices
+                subsystem = os.readlink(os.path.join(device, 'subsystem'))
+                if os.path.basename(subsystem) == 'usb':
+                    continue
+
+                # build separate list of wireless interfaces
+                if os.path.exists(os.path.join(iface, 'wireless')):
+                    wlan_ifaces.append(iface)
+                else:
+                    eth_ifaces.append(iface)
+
+            # prefer the fixed interfaces if there are any, wireless if not
+            if eth_ifaces:
+                ifaces = eth_ifaces
+            elif wlan_ifaces:
+                ifaces = wlan_ifaces
+            else:
+                return None
+
+            devs = {}
+            for iface in ifaces:
+                with open(os.path.join(iface, 'address')) as mac_file:
+                    mac = mac_file.read().strip().lower()
+                dev = os.path.basename(iface)
+                devs[mac] = dev
+
+            mac = sorted(devs.keys())[0]
+            mac_hash = zlib.adler32(mac.encode('utf-8'))
+
+            log.info(" - Selected dev %s address %s", devs[mac], mac)
+            log.info(" - Found MAC hash: %u", mac_hash)
+
+            return mac_hash
+        except Exception:
+            log.exception("Unable to get mac_hash!")
+
+            return None
+
     def _get_count(self):
         count = 0
 
@@ -284,7 +342,7 @@ class PhoneHome(object):
                 count = int(count_data.strip())
         except FileNotFoundError:
             pass
-        except:
+        except Exception:
             log.exception("Unable to get count!")
             return 0
 
@@ -299,7 +357,7 @@ class PhoneHome(object):
             self._variables['count'] = count
 
             log.info(" - Updated count: %d", count)
-        except:
+        except Exception:
             log.exception("Unable to set count!")
 
             raise
@@ -309,7 +367,7 @@ class PhoneHome(object):
             log.info("Getting variable: %s", name)
             var = getattr(self, '_get_' + name)()
 
-            if var is None or var == '':
+            if name in self.MANDATORY_STRINGS and not var:
                 var = "unknown"
 
             self._variables[name] = var
@@ -319,7 +377,9 @@ class PhoneHome(object):
     def _send_to_server(self, endpoint, variables):
         request = {}
         for name in variables:
-            request[name] = self._lookup_or_get_variable(name)
+            val = self._lookup_or_get_variable(name)
+            if val:
+                request[name] = val
 
         log.info("Request data: %s", request)
         log.info("Sending to server (%s)...", endpoint)
@@ -331,15 +391,15 @@ class PhoneHome(object):
         try:
             resp = requests.put(endpoint, json=request)
             resp.raise_for_status()
-        except Exception as e:
-            log.warning("Sending failed! %s", e)
+        except Exception:
+            log.warning("Sending failed!", exc_info=True)
             return False
 
         try:
             response = resp.json()
-        except ValueError as e:
+        except ValueError:
             # TODO: json.JSONDecodeError when we ship Python >= 3.5
-            log.warning("Failed to parse response %r: %s", resp.content, e)
+            log.warning("Failed to parse response: %r", resp.content, exc_info=True)
             return False
 
         log.info('Response: %s', response)
@@ -440,7 +500,7 @@ class PhoneHome(object):
                     success = False
             else:
                 log.info("Ping not due yet.")
-        except:
+        except Exception:
             log.exception("Unhandled exception:")
             exit(1)
 
