@@ -120,7 +120,7 @@ class PhoneHome(object):
                 dt_data = self._lookup_or_get_variable('dt_info')
                 dt_fields = dt_data.split(',')
                 vendor = dt_fields[0]
-        except:
+        except Exception:
             log.exception("Unable to get vendor name!")
 
         log.info(" - Found vendor: %s", vendor)
@@ -141,7 +141,7 @@ class PhoneHome(object):
                 dt_data = self._lookup_or_get_variable('dt_info')
                 dt_fields = dt_data.split(',')
                 product = dt_fields[1]
-        except:
+        except Exception:
             log.exception("Unable to get product name!")
 
         log.info(" - Found product: %s", product)
@@ -161,6 +161,7 @@ class PhoneHome(object):
                 image = image.decode(errors='replace').strip()
 
                 log.info(" - Image from %s: %s", path, image)
+
                 return image
             except subprocess.CalledProcessError:
                 log.info("Unable to get image name from %s", path)
@@ -181,7 +182,7 @@ class PhoneHome(object):
             uploading_enabled = config['global'].getboolean('uploading_enabled',
                                                             uploading_enabled)
             environment = config['global'].get('environment', environment)
-        except:
+        except Exception:
             log.exception("Unable to read %s, assuming fallback values.",
                           permissions_file)
 
@@ -201,8 +202,6 @@ class PhoneHome(object):
         return environment
 
     def _get_release(self):
-        release = None
-
         try:
             release_data = None
             with open('/etc/os-release') as release_file:
@@ -214,20 +213,20 @@ class PhoneHome(object):
                 key, value = release_item.split('=', 1)
                 if key == 'VERSION':
                     log.info(' - Found version key')
+
                     if value.startswith('"') and value.endswith('"'):
                         value = value[1:-1]
 
-                    release = value
+                    release = value.strip()
+
                     log.info(' - Release: %s', release)
+
                     return release
 
-        except:
+        except Exception:
             log.exception("Unable to get release name!")
 
-        if release:
-            release = release.strip()
-
-        return release
+        return None
 
     def _get_serial(self):
         serial = None
@@ -240,7 +239,7 @@ class PhoneHome(object):
                 with open('/sys/class/endless_mfgdata/entries/SSN') \
                         as ssn_file:
                     serial = ssn_file.read().strip()
-        except:
+        except Exception:
             log.exception("Unable to get serial! Check that you're running "
                           "as root!")
 
@@ -343,7 +342,7 @@ class PhoneHome(object):
                 count = int(count_data.strip())
         except FileNotFoundError:
             pass
-        except:
+        except Exception:
             log.exception("Unable to get count!")
             return 0
 
@@ -358,7 +357,7 @@ class PhoneHome(object):
             self._variables['count'] = count
 
             log.info(" - Updated count: %d", count)
-        except:
+        except Exception:
             log.exception("Unable to set count!")
 
             raise
@@ -392,15 +391,15 @@ class PhoneHome(object):
         try:
             resp = requests.put(endpoint, json=request)
             resp.raise_for_status()
-        except Exception as e:
-            log.warning("Sending failed! %s", e)
+        except Exception:
+            log.warning("Sending failed!", exc_info=True)
             return False
 
         try:
             response = resp.json()
-        except ValueError as e:
+        except ValueError:
             # TODO: json.JSONDecodeError when we ship Python >= 3.5
-            log.warning("Failed to parse response %r: %s", resp.content, e)
+            log.warning("Failed to parse response: %r", resp.content, exc_info=True)
             return False
 
         log.info('Response: %s', response)
@@ -501,7 +500,7 @@ class PhoneHome(object):
                     success = False
             else:
                 log.info("Ping not due yet.")
-        except:
+        except Exception:
             log.exception("Unhandled exception:")
             exit(1)
 
