@@ -378,7 +378,7 @@ class PhoneHome(object):
         request = {}
         for name in variables:
             val = self._lookup_or_get_variable(name)
-            if val:
+            if val is not None:
                 request[name] = val
 
         log.info("Request data: %s", request)
