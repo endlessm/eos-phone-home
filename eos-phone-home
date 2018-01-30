@@ -85,7 +85,8 @@ class PhoneHome(object):
 
     # variables which should be replaced with "unknown" rather
     # than omitted if the get function returns None
-    MANDATORY_STRINGS = ('image', 'vendor', 'product', 'release')
+    MANDATORY_STRINGS = ('image', 'vendor', 'product', 'release', 'serial',
+                         'metrics_environment')
 
     def __init__(self, is_debug, force):
         self._debug = is_debug
