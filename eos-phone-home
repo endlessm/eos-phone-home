@@ -70,6 +70,10 @@ import requests
 log = logging.getLogger(__name__)
 
 
+ProductInfo = collections.namedtuple('ProductInfo',
+                                     ['vendor', 'product', 'serial'])
+
+
 class PhoneHome(object):
     STATE_DIRECTORY = "/var/lib/eos-phone-home"
 
@@ -96,61 +100,66 @@ class PhoneHome(object):
         self._activated_path = os.path.join(self.STATE_DIRECTORY, 'activated')
         self._count_path = os.path.join(self.STATE_DIRECTORY, 'count')
 
-    # XXX: This is not a regular file - it returns multiple vendor/product
-    #      lines that are NUL delimited
     def _get_dt_info(self):
-        dt_data = None
-
+        '''Note that this is not a regular file: it contains multiple
+        vendor/product lines that are NUL-delimited.'''
         # XXX: Used for testing due to the odd spec
-        # with open('test_data/compatible') as dt_file:
-        with open('/proc/device-tree/compatible') as dt_file:
-            dt_data = dt_file.read().split('\0')[0]
+        # path = 'test_data/compatible'
+        path = '/proc/device-tree/compatible'
 
-        log.debug("DT data: %s", dt_data)
+        try:
+            with open(path, 'r') as dt_file:
+                dt_data = dt_file.read().split('\0')[0].split(',')
 
-        return dt_data
+            log.debug("DT data: %s", dt_data)
+            return dt_data
+        except Exception:
+            log.exception('Failed to read %s', path)
+            return None
+
+    def _read_text(self, path):
+        '''Reads stripped text from path, logging & squashing errors.'''
+        try:
+            with open(path, 'r') as f:
+                return f.read().strip()
+        except Exception:
+            log.exception('Failed to read %s', path)
+            return None
+
+    def _get_product_info(self):
+        try:
+            dmi_dir = '/sys/class/dmi/id'
+            if os.path.isdir(dmi_dir):
+                vendor = self._read_text(os.path.join(dmi_dir, 'sys_vendor'))
+                product = self._read_text(os.path.join(dmi_dir, 'product_name'))
+                serial = self._read_text(os.path.join(dmi_dir, 'product_serial'))
+            else:
+                dt_fields = self._lookup_or_get_variable('dt_info')
+                if dt_fields:
+                    vendor = dt_fields[0]
+                    product = dt_fields[1]
+                else:
+                    vendor = None
+                    product = None
+
+                ssn_path = '/sys/class/endless_mfgdata/entries/SSN'
+                serial = self._read_text(ssn_path)
+
+            product_info = ProductInfo(vendor, product, serial)
+            log.info(" - Found product info: %s", product_info)
+            return product_info
+        except Exception:
+            log.exception("Unable to get product info!")
+            return ProductInfo(None, None, None)
 
     def _get_vendor(self):
-        vendor = None
-
-        try:
-            if os.path.isdir('/sys/class/dmi/id'):
-                with open('/sys/class/dmi/id/sys_vendor') as vendor_file:
-                    vendor = vendor_file.read().strip()
-            else:
-                dt_data = self._lookup_or_get_variable('dt_info')
-                dt_fields = dt_data.split(',')
-                vendor = dt_fields[0]
-        except Exception:
-            log.exception("Unable to get vendor name!")
-
-        log.info(" - Found vendor: %s", vendor)
-
-        if vendor:
-            vendor = vendor.strip()
-
-        return vendor
+        return self._lookup_or_get_variable('product_info').vendor
 
     def _get_product(self):
-        product = None
+        return self._lookup_or_get_variable('product_info').product
 
-        try:
-            if os.path.isdir('/sys/class/dmi/id'):
-                with open('/sys/class/dmi/id/product_name') as product_file:
-                    product = product_file.read().strip()
-            else:
-                dt_data = self._lookup_or_get_variable('dt_info')
-                dt_fields = dt_data.split(',')
-                product = dt_fields[1]
-        except Exception:
-            log.exception("Unable to get product name!")
-
-        log.info(" - Found product: %s", product)
-
-        if product:
-            product = product.strip()
-
-        return product
+    def _get_serial(self):
+        return self._lookup_or_get_variable('product_info').serial
 
     def _get_image(self):
         image = None
@@ -228,28 +237,6 @@ class PhoneHome(object):
             log.exception("Unable to get release name!")
 
         return None
-
-    def _get_serial(self):
-        serial = None
-
-        try:
-            if os.path.isdir('/sys/class/dmi/id'):
-                with open('/sys/class/dmi/id/product_serial') as ssn_file:
-                    serial = ssn_file.read().strip()
-            else:
-                with open('/sys/class/endless_mfgdata/entries/SSN') \
-                        as ssn_file:
-                    serial = ssn_file.read().strip()
-        except Exception:
-            log.exception("Unable to get serial! Check that you're running "
-                          "as root!")
-
-        log.info(" - Found serial: %s", serial)
-
-        if serial:
-            serial = serial.strip()
-
-        return serial
 
     def _get_cmdline(self):
         with open('/proc/cmdline', 'r') as command_line_file:
