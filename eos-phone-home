@@ -75,13 +75,11 @@ ProductInfo = collections.namedtuple('ProductInfo',
 
 
 class PhoneHome(object):
-    ACTIVATION_ENDPOINT = os.getenv('EOS_PHONE_HOME_ACTIVATE_URL',
-                                    "https://home.endlessm.com/v1/activate")
+    DEFAULT_API_HOST = 'https://home.endlessm.com'
+
     ACTIVATION_VARIABLES = ('dualboot', 'live', 'image', 'release', 'vendor',
                             'product', 'serial', 'mac_hash')
 
-    PING_ENDPOINT = os.getenv('EOS_PHONE_HOME_PING_URL',
-                              "https://home.endlessm.com/v1/ping")
     PING_VARIABLES = ('dualboot', 'image', 'release', 'vendor', 'product',
                       'count', 'metrics_enabled', 'metrics_environment')
 
@@ -90,7 +88,7 @@ class PhoneHome(object):
     MANDATORY_STRINGS = ('image', 'vendor', 'product', 'release', 'serial',
                          'metrics_environment')
 
-    def __init__(self, is_debug, force, root='/'):
+    def __init__(self, is_debug, force, root='/', api_host=DEFAULT_API_HOST):
         self._debug = is_debug
         self._force = force
         self._root = root
@@ -99,6 +97,9 @@ class PhoneHome(object):
         self._state_directory = self._resolve_path('var/lib/eos-phone-home')
         self._activated_path = os.path.join(self._state_directory, 'activated')
         self._count_path = os.path.join(self._state_directory, 'count')
+
+        self._activation_endpoint = api_host + '/v1/activate'
+        self._ping_endpoint = api_host + '/v1/ping'
 
     def _resolve_path(self, relpath):
         '''Resolves 'relpath' against the root directory passed to the
@@ -410,7 +411,9 @@ class PhoneHome(object):
         return not os.path.exists(self._activated_path)
 
     def _do_activate(self):
-        if self._send_to_server(self.ACTIVATION_ENDPOINT,
+        log.debug("Sending activation data to %s", self._activation_endpoint)
+
+        if self._send_to_server(self._activation_endpoint,
                                 self.ACTIVATION_VARIABLES):
             # We're done, mark us activated
             with open(self._activated_path, 'w'):
@@ -452,7 +455,9 @@ class PhoneHome(object):
         return count_age >= DAY_IN_SECONDS
 
     def _do_ping(self):
-        if self._send_to_server(self.PING_ENDPOINT, self.PING_VARIABLES):
+        log.debug("Sending ping data to %s", self._ping_endpoint)
+
+        if self._send_to_server(self._ping_endpoint, self.PING_VARIABLES):
             if self._debug:
                 log.info("Debugging turned on so not incrementing count.")
             else:
@@ -507,6 +512,9 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument('--debug', action='store_true',
                    help='verbose output; disables any actual phoning home')
+    p.add_argument('-t', '--host', default=PhoneHome.DEFAULT_API_HOST,
+                   help='Use specified host as the API server. Default: ' +
+                        PhoneHome.DEFAULT_API_HOST)
     p.add_argument('--force', action='store_true',
                    help='always collect data (implies --debug)')
     p.add_argument('--exit-on-server-error', action='store_true',
@@ -521,7 +529,9 @@ def main():
     else:
         level = logging.INFO
     logging.basicConfig(level=level)
-    PhoneHome(is_debug, args.force).run(args.exit_on_server_error)
+
+    app = PhoneHome(is_debug, args.force, api_host=args.host)
+    app.run(args.exit_on_server_error)
 
 
 if __name__ == '__main__':
