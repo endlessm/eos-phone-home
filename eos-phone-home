@@ -75,8 +75,6 @@ ProductInfo = collections.namedtuple('ProductInfo',
 
 
 class PhoneHome(object):
-    STATE_DIRECTORY = "/var/lib/eos-phone-home"
-
     ACTIVATION_ENDPOINT = os.getenv('EOS_PHONE_HOME_ACTIVATE_URL',
                                     "https://home.endlessm.com/v1/activate")
     ACTIVATION_VARIABLES = ('dualboot', 'live', 'image', 'release', 'vendor',
@@ -92,20 +90,26 @@ class PhoneHome(object):
     MANDATORY_STRINGS = ('image', 'vendor', 'product', 'release', 'serial',
                          'metrics_environment')
 
-    def __init__(self, is_debug, force):
+    def __init__(self, is_debug, force, root='/'):
         self._debug = is_debug
         self._force = force
+        self._root = root
         self._variables = {}
 
-        self._activated_path = os.path.join(self.STATE_DIRECTORY, 'activated')
-        self._count_path = os.path.join(self.STATE_DIRECTORY, 'count')
+        self._state_directory = self._resolve_path('var/lib/eos-phone-home')
+        self._activated_path = os.path.join(self._state_directory, 'activated')
+        self._count_path = os.path.join(self._state_directory, 'count')
+
+    def _resolve_path(self, relpath):
+        '''Resolves 'relpath' against the root directory passed to the
+        constructor. In production, this is /; in the test suite, it's a
+        temporary directory.'''
+        return os.path.join(self._root, relpath)
 
     def _get_dt_info(self):
         '''Note that this is not a regular file: it contains multiple
         vendor/product lines that are NUL-delimited.'''
-        # XXX: Used for testing due to the odd spec
-        # path = 'test_data/compatible'
-        path = '/proc/device-tree/compatible'
+        path = self._resolve_path('proc/device-tree/compatible')
 
         try:
             with open(path, 'r') as dt_file:
@@ -128,7 +132,7 @@ class PhoneHome(object):
 
     def _get_product_info(self):
         try:
-            dmi_dir = '/sys/class/dmi/id'
+            dmi_dir = self._resolve_path('sys/class/dmi/id')
             if os.path.isdir(dmi_dir):
                 vendor = self._read_text(os.path.join(dmi_dir, 'sys_vendor'))
                 product = self._read_text(os.path.join(dmi_dir, 'product_name'))
@@ -142,7 +146,8 @@ class PhoneHome(object):
                     vendor = None
                     product = None
 
-                ssn_path = '/sys/class/endless_mfgdata/entries/SSN'
+                ssn_path = self._resolve_path(
+                    'sys/class/endless_mfgdata/entries/SSN')
                 serial = self._read_text(ssn_path)
 
             product_info = ProductInfo(vendor, product, serial)
@@ -165,6 +170,7 @@ class PhoneHome(object):
         image = None
 
         for path in ['/sysroot', '/']:
+            path = self._resolve_path(path)
             try:
                 image = subprocess.check_output(['attr', '-q', '-g',
                                                  'eos-image-version', path])
@@ -179,7 +185,8 @@ class PhoneHome(object):
         return None
 
     def _get_metrics(self):
-        permissions_file = '/etc/metrics/eos-metrics-permissions.conf'
+        permissions_file = self._resolve_path(
+            'etc/metrics/eos-metrics-permissions.conf')
 
         enabled = False
         uploading_enabled = False
@@ -212,7 +219,7 @@ class PhoneHome(object):
     def _get_release(self):
         try:
             release_data = None
-            with open('/etc/os-release') as release_file:
+            with open(self._resolve_path('etc/os-release')) as release_file:
                 release_data = release_file.read()
 
             for release_item in release_data.splitlines():
@@ -237,9 +244,7 @@ class PhoneHome(object):
         return None
 
     def _get_cmdline(self):
-        with open('/proc/cmdline', 'r') as command_line_file:
-            command_line = command_line_file.read().strip()
-
+        command_line = self._read_text(self._resolve_path('proc/cmdline'))
         log.info(" - Cmdline: %s", command_line)
         return command_line
 
@@ -273,7 +278,7 @@ class PhoneHome(object):
             eth_ifaces = []
             wlan_ifaces = []
 
-            for iface in glob.glob('/sys/class/net/*'):
+            for iface in glob.glob(self._resolve_path('sys/class/net/*')):
                 # skip virtual interfaces
                 device = os.path.join(iface, 'device')
                 if not os.path.exists(device):
@@ -360,12 +365,16 @@ class PhoneHome(object):
 
         return self._variables[name]
 
-    def _send_to_server(self, endpoint, variables):
+    def build_request(self, variables):
         request = {}
         for name in variables:
             val = self._lookup_or_get_variable(name)
             if val is not None:
                 request[name] = val
+        return request
+
+    def _send_to_server(self, endpoint, variables):
+        request = self.build_request(variables)
 
         log.info("Request data: %s", request)
         log.info("Sending to server (%s)...", endpoint)
@@ -460,14 +469,14 @@ class PhoneHome(object):
         return True
 
     def run(self, exit_on_server_error):
-        if not os.path.isdir(self.STATE_DIRECTORY):
+        if not os.path.isdir(self._state_directory):
             log.critical("State folder (%s) not found! Exiting!",
-                         self.STATE_DIRECTORY)
+                         self._state_directory)
             exit(1)
 
-        if not os.access(self.STATE_DIRECTORY, os.W_OK):
+        if not os.access(self._state_directory, os.W_OK):
             log.critical("State folder (%s) not writable! Exiting!",
-                         self.STATE_DIRECTORY)
+                         self._state_directory)
             exit(1)
 
         success = True
