@@ -2,13 +2,19 @@ Source: eos-phone-home
 Section: admin
 Priority: extra
 Maintainer: Robert McQueen <rob@endlessm.com>
-Build-Depends: debhelper (>= 7)
+Build-Depends: attr,
+               debhelper (>= 7),
+               python3-pytest,
+               python3-requests,
 Standards-Version: 3.9.4
 Vcs-Git: https://github.com/endlessm/eos-phone-home.git
 
 Package: eos-phone-home
 Architecture: all
-Depends: python3, python3-requests, ${misc:Depends}
+Depends: attr,
+         python3,
+         python3-requests,
+         ${misc:Depends}
 Description: send system activation/daily ping messages to Endless
  This package installs a periodic systemd timer to send a one-off activation
  message (on first boot-up) and a daily ping to Endless, in order to discover

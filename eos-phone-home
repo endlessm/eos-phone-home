@@ -69,17 +69,17 @@ import requests
 
 log = logging.getLogger(__name__)
 
+Metrics = collections.namedtuple('Metrics', ['enabled', 'environment'])
+ProductInfo = collections.namedtuple('ProductInfo',
+                                     ['vendor', 'product', 'serial'])
+
 
 class PhoneHome(object):
-    STATE_DIRECTORY = "/var/lib/eos-phone-home"
+    DEFAULT_API_HOST = 'https://home.endlessm.com'
 
-    ACTIVATION_ENDPOINT = os.getenv('EOS_PHONE_HOME_ACTIVATE_URL',
-                                    "https://home.endlessm.com/v1/activate")
     ACTIVATION_VARIABLES = ('dualboot', 'live', 'image', 'release', 'vendor',
                             'product', 'serial', 'mac_hash')
 
-    PING_ENDPOINT = os.getenv('EOS_PHONE_HOME_PING_URL',
-                              "https://home.endlessm.com/v1/ping")
     PING_VARIABLES = ('dualboot', 'image', 'release', 'vendor', 'product',
                       'count', 'metrics_enabled', 'metrics_environment')
 
@@ -88,74 +88,90 @@ class PhoneHome(object):
     MANDATORY_STRINGS = ('image', 'vendor', 'product', 'release', 'serial',
                          'metrics_environment')
 
-    def __init__(self, is_debug, force):
+    def __init__(self, is_debug, force, root='/', api_host=DEFAULT_API_HOST):
         self._debug = is_debug
         self._force = force
+        self._root = root
         self._variables = {}
 
-        self._activated_path = os.path.join(self.STATE_DIRECTORY, 'activated')
-        self._count_path = os.path.join(self.STATE_DIRECTORY, 'count')
+        self._state_directory = self._resolve_path('var/lib/eos-phone-home')
+        self._activated_path = os.path.join(self._state_directory, 'activated')
+        self._count_path = os.path.join(self._state_directory, 'count')
 
-    # XXX: This is not a regular file - it returns multiple vendor/product
-    #      lines that are NUL delimited
+        self._activation_endpoint = api_host + '/v1/activate'
+        self._ping_endpoint = api_host + '/v1/ping'
+
+    def _resolve_path(self, relpath):
+        '''Resolves 'relpath' against the root directory passed to the
+        constructor. In production, this is /; in the test suite, it's a
+        temporary directory.'''
+        return os.path.join(self._root, relpath)
+
     def _get_dt_info(self):
-        dt_data = None
+        '''Note that this is not a regular file: it contains multiple
+        vendor/product lines that are NUL-delimited.'''
+        path = self._resolve_path('proc/device-tree/compatible')
 
-        # XXX: Used for testing due to the odd spec
-        # with open('test_data/compatible') as dt_file:
-        with open('/proc/device-tree/compatible') as dt_file:
-            dt_data = dt_file.read().split('\0')[0]
+        try:
+            with open(path, 'r') as dt_file:
+                dt_data = dt_file.read().split('\0')[0].split(',')
 
-        log.debug("DT data: %s", dt_data)
+            log.debug("DT data: %s", dt_data)
+            return dt_data
+        except Exception:
+            log.exception('Failed to read %s', path)
+            return None
 
-        return dt_data
+    def _read_text(self, path):
+        '''Reads stripped text from path, logging & squashing errors.'''
+        try:
+            with open(path, 'r') as f:
+                return f.read().strip()
+        except Exception:
+            log.exception('Failed to read %s', path)
+            return None
+
+    def _get_product_info(self):
+        try:
+            dmi_dir = self._resolve_path('sys/class/dmi/id')
+            if os.path.isdir(dmi_dir):
+                vendor = self._read_text(os.path.join(dmi_dir, 'sys_vendor'))
+                product = self._read_text(os.path.join(dmi_dir, 'product_name'))
+                serial = self._read_text(os.path.join(dmi_dir, 'product_serial'))
+            else:
+                dt_fields = self._lookup_or_get_variable('dt_info')
+                if dt_fields:
+                    vendor = dt_fields[0]
+                    product = dt_fields[1]
+                else:
+                    vendor = None
+                    product = None
+
+                ssn_path = self._resolve_path(
+                    'sys/class/endless_mfgdata/entries/SSN')
+                serial = self._read_text(ssn_path)
+
+            product_info = ProductInfo(vendor, product, serial)
+            log.info(" - Found product info: %s", product_info)
+            return product_info
+        except Exception:
+            log.exception("Unable to get product info!")
+            return ProductInfo(None, None, None)
 
     def _get_vendor(self):
-        vendor = None
-
-        try:
-            if os.path.isdir('/sys/class/dmi/id'):
-                with open('/sys/class/dmi/id/sys_vendor') as vendor_file:
-                    vendor = vendor_file.read().strip()
-            else:
-                dt_data = self._lookup_or_get_variable('dt_info')
-                dt_fields = dt_data.split(',')
-                vendor = dt_fields[0]
-        except Exception:
-            log.exception("Unable to get vendor name!")
-
-        log.info(" - Found vendor: %s", vendor)
-
-        if vendor:
-            vendor = vendor.strip()
-
-        return vendor
+        return self._lookup_or_get_variable('product_info').vendor
 
     def _get_product(self):
-        product = None
+        return self._lookup_or_get_variable('product_info').product
 
-        try:
-            if os.path.isdir('/sys/class/dmi/id'):
-                with open('/sys/class/dmi/id/product_name') as product_file:
-                    product = product_file.read().strip()
-            else:
-                dt_data = self._lookup_or_get_variable('dt_info')
-                dt_fields = dt_data.split(',')
-                product = dt_fields[1]
-        except Exception:
-            log.exception("Unable to get product name!")
-
-        log.info(" - Found product: %s", product)
-
-        if product:
-            product = product.strip()
-
-        return product
+    def _get_serial(self):
+        return self._lookup_or_get_variable('product_info').serial
 
     def _get_image(self):
         image = None
 
         for path in ['/sysroot', '/']:
+            path = self._resolve_path(path)
             try:
                 image = subprocess.check_output(['attr', '-q', '-g',
                                                  'eos-image-version', path])
@@ -170,7 +186,8 @@ class PhoneHome(object):
         return None
 
     def _get_metrics(self):
-        permissions_file = '/etc/metrics/eos-metrics-permissions.conf'
+        permissions_file = self._resolve_path(
+            'etc/metrics/eos-metrics-permissions.conf')
 
         enabled = False
         uploading_enabled = False
@@ -188,8 +205,6 @@ class PhoneHome(object):
                           permissions_file)
 
         environment = environment[:16]
-
-        Metrics = collections.namedtuple('Metrics', 'enabled environment')
         return Metrics(enabled and uploading_enabled, environment)
 
     def _get_metrics_enabled(self):
@@ -205,7 +220,7 @@ class PhoneHome(object):
     def _get_release(self):
         try:
             release_data = None
-            with open('/etc/os-release') as release_file:
+            with open(self._resolve_path('etc/os-release')) as release_file:
                 release_data = release_file.read()
 
             for release_item in release_data.splitlines():
@@ -229,32 +244,8 @@ class PhoneHome(object):
 
         return None
 
-    def _get_serial(self):
-        serial = None
-
-        try:
-            if os.path.isdir('/sys/class/dmi/id'):
-                with open('/sys/class/dmi/id/product_serial') as ssn_file:
-                    serial = ssn_file.read().strip()
-            else:
-                with open('/sys/class/endless_mfgdata/entries/SSN') \
-                        as ssn_file:
-                    serial = ssn_file.read().strip()
-        except Exception:
-            log.exception("Unable to get serial! Check that you're running "
-                          "as root!")
-
-        log.info(" - Found serial: %s", serial)
-
-        if serial:
-            serial = serial.strip()
-
-        return serial
-
     def _get_cmdline(self):
-        with open('/proc/cmdline', 'r') as command_line_file:
-            command_line = command_line_file.read().strip()
-
+        command_line = self._read_text(self._resolve_path('proc/cmdline'))
         log.info(" - Cmdline: %s", command_line)
         return command_line
 
@@ -288,7 +279,7 @@ class PhoneHome(object):
             eth_ifaces = []
             wlan_ifaces = []
 
-            for iface in glob.glob('/sys/class/net/*'):
+            for iface in glob.glob(self._resolve_path('sys/class/net/*')):
                 # skip virtual interfaces
                 device = os.path.join(iface, 'device')
                 if not os.path.exists(device):
@@ -375,12 +366,16 @@ class PhoneHome(object):
 
         return self._variables[name]
 
-    def _send_to_server(self, endpoint, variables):
+    def build_request(self, variables):
         request = {}
         for name in variables:
             val = self._lookup_or_get_variable(name)
             if val is not None:
                 request[name] = val
+        return request
+
+    def _send_to_server(self, endpoint, variables):
+        request = self.build_request(variables)
 
         log.info("Request data: %s", request)
         log.info("Sending to server (%s)...", endpoint)
@@ -416,7 +411,9 @@ class PhoneHome(object):
         return not os.path.exists(self._activated_path)
 
     def _do_activate(self):
-        if self._send_to_server(self.ACTIVATION_ENDPOINT,
+        log.debug("Sending activation data to %s", self._activation_endpoint)
+
+        if self._send_to_server(self._activation_endpoint,
                                 self.ACTIVATION_VARIABLES):
             # We're done, mark us activated
             with open(self._activated_path, 'w'):
@@ -458,7 +455,9 @@ class PhoneHome(object):
         return count_age >= DAY_IN_SECONDS
 
     def _do_ping(self):
-        if self._send_to_server(self.PING_ENDPOINT, self.PING_VARIABLES):
+        log.debug("Sending ping data to %s", self._ping_endpoint)
+
+        if self._send_to_server(self._ping_endpoint, self.PING_VARIABLES):
             if self._debug:
                 log.info("Debugging turned on so not incrementing count.")
             else:
@@ -475,14 +474,14 @@ class PhoneHome(object):
         return True
 
     def run(self, exit_on_server_error):
-        if not os.path.isdir(self.STATE_DIRECTORY):
+        if not os.path.isdir(self._state_directory):
             log.critical("State folder (%s) not found! Exiting!",
-                         self.STATE_DIRECTORY)
+                         self._state_directory)
             exit(1)
 
-        if not os.access(self.STATE_DIRECTORY, os.W_OK):
+        if not os.access(self._state_directory, os.W_OK):
             log.critical("State folder (%s) not writable! Exiting!",
-                         self.STATE_DIRECTORY)
+                         self._state_directory)
             exit(1)
 
         success = True
@@ -513,6 +512,9 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument('--debug', action='store_true',
                    help='verbose output; disables any actual phoning home')
+    p.add_argument('-t', '--host', default=PhoneHome.DEFAULT_API_HOST,
+                   help='Use specified host as the API server. Default: ' +
+                        PhoneHome.DEFAULT_API_HOST)
     p.add_argument('--force', action='store_true',
                    help='always collect data (implies --debug)')
     p.add_argument('--exit-on-server-error', action='store_true',
@@ -527,7 +529,9 @@ def main():
     else:
         level = logging.INFO
     logging.basicConfig(level=level)
-    PhoneHome(is_debug, args.force).run(args.exit_on_server_error)
+
+    app = PhoneHome(is_debug, args.force, api_host=args.host)
+    app.run(args.exit_on_server_error)
 
 
 if __name__ == '__main__':
