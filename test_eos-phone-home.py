@@ -24,36 +24,14 @@ def test_get_product_info_arm(tmpdir, app):
                                                b'vendor2,model2\0',
                                                ensure=True)
 
-    endless_serial_number_file = tmpdir.join('sys', 'class',
-                                             'endless_mfgdata', 'entries',
-                                             'SSN')
-    endless_serial_number_file.write('  serial  ', ensure=True)
-
     product_info = app._get_product_info()
-    expected = eos_phone_home.ProductInfo('vendor1', 'model1', 'serial')
-    assert product_info == expected
-
-
-def test_get_product_info_arm_missing_serial(tmpdir, app):
-    device_tree_product_info_file = tmpdir.join('proc', 'device-tree',
-                                                'compatible')
-    device_tree_product_info_file.write_binary(b'vendor1,model1\0'
-                                               b'vendor2,model2\0',
-                                               ensure=True)
-
-    product_info = app._get_product_info()
-    expected = eos_phone_home.ProductInfo('vendor1', 'model1', None)
+    expected = eos_phone_home.ProductInfo('vendor1', 'model1')
     assert product_info == expected
 
 
 def test_get_product_info_arm_missing_dt(tmpdir, app):
-    endless_serial_number_file = tmpdir.join('sys', 'class',
-                                             'endless_mfgdata', 'entries',
-                                             'SSN')
-    endless_serial_number_file.write('  serial  ', ensure=True)
-
     product_info = app._get_product_info()
-    expected = eos_phone_home.ProductInfo(None, None, 'serial')
+    expected = eos_phone_home.ProductInfo(None, None)
     assert product_info == expected
 
 
@@ -61,20 +39,18 @@ def test_get_product_info_x86(tmpdir, app):
     dmi_dir = tmpdir.join('sys', 'class', 'dmi', 'id')
     dmi_dir.join('sys_vendor').write('  vendor', ensure=True)
     dmi_dir.join('product_name').write(' product')
-    dmi_dir.join('product_serial').write('serial  ')
 
     product_info = app._get_product_info()
-    expected = eos_phone_home.ProductInfo('vendor', 'product', 'serial')
+    expected = eos_phone_home.ProductInfo('vendor', 'product')
     assert product_info == expected
 
 
 def test_get_product_info_x86_missing_vendor(tmpdir, app):
     dmi_dir = tmpdir.join('sys', 'class', 'dmi', 'id')
     dmi_dir.join('product_name').write(' product', ensure=True)
-    dmi_dir.join('product_serial').write('serial  ')
 
     product_info = app._get_product_info()
-    expected = eos_phone_home.ProductInfo(None, 'product', 'serial')
+    expected = eos_phone_home.ProductInfo(None, 'product')
     assert product_info == expected
 
 
@@ -133,8 +109,6 @@ def test_build_activation_request_when_fields_cannot_be_determined(tmpdir,
         'release': 'unknown',
         'vendor': 'unknown',
         'product': 'unknown',
-        'serial': 'unknown',
-        # mac_hash, however, is omitted if it can't be determined.
     }
 
 

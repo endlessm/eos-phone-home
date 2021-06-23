@@ -13,5 +13,4 @@ personally identifiable or trackable information.
 
 As well as the daily "ping" message with an incrementing counter, we are
 implementing a one-off "activate" request so we can tell how many systems have
-been turned on. This request does include the machine serial number, but this
-is only ever sent once per system, so cannot be used for any ongoing tracking.
+been turned on.
