@@ -24,7 +24,5 @@ Description: send system activation/daily ping messages to Endless
  Note that this does not send any identifiable user data: it only transmits the
  originally installed operating system version, the current version, the
  machine vendor & product name, and whether the OS metrics system is enabled.
- When the first activation message is sent, it contains the machine serial
- number, but this is not sent again so cannot be used for tracking purposes.
  The daily ping simply contains a cumulative count of how many pings have
  been sent.
