@@ -1,5 +1,6 @@
 from importlib.machinery import SourceFileLoader
 from importlib.util import module_from_spec, spec_from_loader
+import json
 import os
 import sys
 
@@ -150,4 +151,90 @@ def test_build_ping_request_subsequent(tmpdir, app):
         'metrics_enabled': False,
         'metrics_environment': 'unknown',
         'count': 5,
+    }
+
+
+def test_cli_options(tmpdir, monkeypatch):
+    """Test eos-phone-home CLI options"""
+    attrs_path = tmpdir.join('attributes.json')
+
+    def read_attributes():
+        with open(attrs_path, 'r') as f:
+            return json.load(f)
+
+    def write_attributes(attrs):
+        with open(attrs_path, 'w') as f:
+            return json.dump(attrs, f)
+
+    def mock_argv(*args):
+        monkeypatch.setattr(sys, 'argv', ['eos-phone-home'] + list(args))
+
+    def mock_run(self, exit_on_server_error):
+        write_attributes({
+            'debug': self._debug,
+            'force': self._force,
+            'api_host': self._api_host,
+            'exit_on_server_error': exit_on_server_error,
+        })
+
+    monkeypatch.setattr(eos_phone_home.PhoneHome, 'run', mock_run)
+
+    mock_argv()
+    eos_phone_home.main()
+    attrs = read_attributes()
+    assert attrs == {
+        'debug': False,
+        'force': False,
+        'api_host': eos_phone_home.PhoneHome.DEFAULT_API_HOST,
+        'exit_on_server_error': False,
+    }
+
+    mock_argv('--debug')
+    eos_phone_home.main()
+    attrs = read_attributes()
+    assert attrs == {
+        'debug': True,
+        'force': False,
+        'api_host': eos_phone_home.PhoneHome.DEFAULT_API_HOST,
+        'exit_on_server_error': False,
+    }
+
+    mock_argv('--force')
+    eos_phone_home.main()
+    attrs = read_attributes()
+    assert attrs == {
+        'debug': True,
+        'force': True,
+        'api_host': eos_phone_home.PhoneHome.DEFAULT_API_HOST,
+        'exit_on_server_error': False,
+    }
+
+    mock_argv('--host=https://home.example.com')
+    eos_phone_home.main()
+    attrs = read_attributes()
+    assert attrs == {
+        'debug': False,
+        'force': False,
+        'api_host': 'https://home.example.com',
+        'exit_on_server_error': False,
+    }
+
+    mock_argv('-t', 'https://home.example.com')
+    eos_phone_home.main()
+    attrs = read_attributes()
+    assert attrs == {
+        'debug': False,
+        'force': False,
+        'api_host': 'https://home.example.com',
+        'exit_on_server_error': False,
+    }
+
+    mock_argv('--exit-on-server-error')
+    eos_phone_home.main()
+    attrs = read_attributes()
+    assert attrs == {
+        'debug': False,
+        'force': False,
+        'api_host': eos_phone_home.PhoneHome.DEFAULT_API_HOST,
+        'exit_on_server_error': True,
     }

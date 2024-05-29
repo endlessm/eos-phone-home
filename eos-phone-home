@@ -88,8 +88,9 @@ class PhoneHome(object):
         self._activated_path = os.path.join(self._state_directory, 'activated')
         self._count_path = os.path.join(self._state_directory, 'count')
 
-        self._activation_endpoint = api_host + '/v1/activate'
-        self._ping_endpoint = api_host + '/v1/ping'
+        self._api_host = api_host
+        self._activation_endpoint = self._api_host + '/v1/activate'
+        self._ping_endpoint = self._api_host + '/v1/ping'
 
     def _resolve_path(self, relpath):
         '''Resolves 'relpath' against the root directory passed to the
