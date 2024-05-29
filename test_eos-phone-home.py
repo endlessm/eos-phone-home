@@ -1,11 +1,17 @@
-import imp
+from importlib.machinery import SourceFileLoader
+from importlib.util import module_from_spec, spec_from_loader
 import os
+import sys
 
 import pytest
 
 SRCDIR = os.path.dirname(__file__)
 eos_phone_home_path = os.path.join(SRCDIR, 'eos-phone-home')
-eos_phone_home = imp.load_source("m", eos_phone_home_path)
+eos_phone_home_loader = SourceFileLoader('eos_phone_home', eos_phone_home_path)
+eos_phone_home_spec = spec_from_loader('eos_phone_home', eos_phone_home_loader)
+eos_phone_home = module_from_spec(eos_phone_home_spec)
+sys.modules['eos_phone_home'] = eos_phone_home
+eos_phone_home_spec.loader.exec_module(eos_phone_home)
 
 
 @pytest.fixture
