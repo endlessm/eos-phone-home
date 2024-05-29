@@ -3,6 +3,7 @@ from importlib.util import module_from_spec, spec_from_loader
 import json
 import os
 import sys
+from textwrap import dedent
 
 import pytest
 
@@ -156,6 +157,7 @@ def test_build_ping_request_subsequent(tmpdir, app):
 
 def test_cli_options(tmpdir, monkeypatch):
     """Test eos-phone-home CLI options"""
+    config_path = tmpdir.join('eos-phone-home.conf')
     attrs_path = tmpdir.join('attributes.json')
 
     def read_attributes():
@@ -167,7 +169,11 @@ def test_cli_options(tmpdir, monkeypatch):
             return json.dump(attrs, f)
 
     def mock_argv(*args):
-        monkeypatch.setattr(sys, 'argv', ['eos-phone-home'] + list(args))
+        monkeypatch.setattr(
+            sys,
+            'argv',
+            ['eos-phone-home', f'--config={config_path}'] + list(args),
+        )
 
     def mock_run(self, exit_on_server_error):
         write_attributes({
@@ -238,3 +244,112 @@ def test_cli_options(tmpdir, monkeypatch):
         'api_host': eos_phone_home.PhoneHome.DEFAULT_API_HOST,
         'exit_on_server_error': True,
     }
+
+    # Test interactions between config file and CLI options
+    with open(config_path, 'w') as f:
+        f.write(dedent(
+            """\
+            [global]
+            host = https://home.example.com
+            debug = true
+            """
+        ))
+    mock_argv()
+    eos_phone_home.main()
+    attrs = read_attributes()
+    assert attrs == {
+        'debug': True,
+        'force': False,
+        'api_host': 'https://home.example.com',
+        'exit_on_server_error': False,
+    }
+
+    with open(config_path, 'w') as f:
+        f.write(dedent(
+            """\
+            [global]
+            host = https://home.example.com
+            debug = false
+            force = false
+            """
+        ))
+    mock_argv('--force', '--host=https://foo.example.com')
+    eos_phone_home.main()
+    attrs = read_attributes()
+    assert attrs == {
+        'debug': True,
+        'force': True,
+        'api_host': 'https://foo.example.com',
+        'exit_on_server_error': False,
+    }
+
+
+def test_config(tmpdir):
+    """Test Config class"""
+    config_path = tmpdir.join('eos-phone-home.conf')
+
+    # Default Config instance
+    config = eos_phone_home.Config()
+    assert config == eos_phone_home.Config(
+        host=eos_phone_home.PhoneHome.DEFAULT_API_HOST,
+        debug=False,
+        force=False,
+        exit_on_server_error=False,
+    )
+
+    # No config file
+    config = eos_phone_home.Config.from_path(config_path)
+    assert config == eos_phone_home.Config(
+        host=eos_phone_home.PhoneHome.DEFAULT_API_HOST,
+        debug=False,
+        force=False,
+        exit_on_server_error=False,
+    )
+
+    # Empty config file
+    with open(config_path, 'w'):
+        pass
+    config = eos_phone_home.Config.from_path(config_path)
+    assert config == eos_phone_home.Config(
+        host=eos_phone_home.PhoneHome.DEFAULT_API_HOST,
+        debug=False,
+        force=False,
+        exit_on_server_error=False,
+    )
+
+    # Full config file
+    with open(config_path, 'w') as f:
+        f.write(dedent(
+            """\
+            [global]
+            host = https://home.example.com
+            debug = true
+            force = yes
+            exit_on_server_error = 1
+            """
+        ))
+    config = eos_phone_home.Config.from_path(config_path)
+    assert config == eos_phone_home.Config(
+        host='https://home.example.com',
+        debug=True,
+        force=True,
+        exit_on_server_error=True,
+    )
+
+    # Config file and overrides
+    with open(config_path, 'w') as f:
+        f.write(dedent(
+            """\
+            [global]
+            host = https://home.example.com
+            exit_on_server_error = true
+            """
+        ))
+    overrides = {'host': 'https://foo.example.com', 'force': True}
+    config = eos_phone_home.Config.from_path(config_path, overrides)
+    assert config == eos_phone_home.Config(
+        host='https://foo.example.com',
+        debug=False,
+        force=True,
+        exit_on_server_error=True,
+    )
