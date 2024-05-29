@@ -152,7 +152,7 @@ class PhoneHome(object):
     def _get_image(self):
         image = None
 
-        for path in ['/sysroot', '/']:
+        for path in ['sysroot', '']:
             path = self._resolve_path(path)
             try:
                 image = subprocess.check_output(['attr', '-q', '-g',
