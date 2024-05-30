@@ -50,6 +50,7 @@
 import argparse
 import collections
 import configparser
+import dataclasses
 import logging
 import os
 import re
@@ -62,6 +63,8 @@ log = logging.getLogger(__name__)
 
 Metrics = collections.namedtuple('Metrics', ['enabled', 'environment'])
 ProductInfo = collections.namedtuple('ProductInfo', ['vendor', 'product'])
+
+DEFAULT_CONFIG_PATH = '/etc/eos-phone-home.conf'
 
 
 class PhoneHome(object):
@@ -88,8 +91,9 @@ class PhoneHome(object):
         self._activated_path = os.path.join(self._state_directory, 'activated')
         self._count_path = os.path.join(self._state_directory, 'count')
 
-        self._activation_endpoint = api_host + '/v1/activate'
-        self._ping_endpoint = api_host + '/v1/ping'
+        self._api_host = api_host
+        self._activation_endpoint = self._api_host + '/v1/activate'
+        self._ping_endpoint = self._api_host + '/v1/ping'
 
     def _resolve_path(self, relpath):
         '''Resolves 'relpath' against the root directory passed to the
@@ -152,7 +156,7 @@ class PhoneHome(object):
     def _get_image(self):
         image = None
 
-        for path in ['/sysroot', '/']:
+        for path in ['sysroot', '']:
             path = self._resolve_path(path)
             try:
                 image = subprocess.check_output(['attr', '-q', '-g',
@@ -441,21 +445,106 @@ class PhoneHome(object):
             exit(1)
 
 
+@dataclasses.dataclass
+class Config:
+    """eos-phone-home configuration"""
+    host: str = PhoneHome.DEFAULT_API_HOST
+    debug: bool = False
+    force: bool = False
+    exit_on_server_error: bool = False
+
+    @classmethod
+    def from_path(cls, path=DEFAULT_CONFIG_PATH, overrides=None):
+        """Read the configuration file at path and return a Config instance
+
+        The configuration file is INI formatted with a single global section.
+        The options in the global section correspond to the Config fields.
+
+        Additional settings can be set in the overrides dictionary. These
+        settings take precedence over the configuration file settings.
+        """
+        if overrides is None:
+            overrides = {}
+
+        cp = configparser.ConfigParser()
+
+        try:
+            with open(path, 'r') as cf:
+                cp.read_file(cf)
+        except FileNotFoundError:
+            if path != DEFAULT_CONFIG_PATH:
+                log.warning(f'Configuration file "{path}" does not exist')
+
+        # Build the settings in a dict.
+        settings = {}
+        for field in dataclasses.fields(cls):
+            # Get the override value.
+            value = overrides.get(field.name, None)
+
+            # Fallback to the value from the config file.
+            if value is None:
+                if field.type == bool:
+                    getval = cp.getboolean
+                else:
+                    getval = cp.get
+                value = getval('global', field.name, fallback=None)
+
+            if value is not None:
+                settings[field.name] = value
+
+        return cls(**settings)
+
+
 def main():
-    p = argparse.ArgumentParser()
-    p.add_argument('--debug', action='store_true',
-                   help='verbose output; disables any actual phoning home')
-    p.add_argument('-t', '--host', default=PhoneHome.DEFAULT_API_HOST,
-                   help='Use specified host as the API server. Default: ' +
-                        PhoneHome.DEFAULT_API_HOST)
-    p.add_argument('--force', action='store_true',
-                   help='always collect data (implies --debug)')
-    p.add_argument('--exit-on-server-error', action='store_true',
-                   help='exit with a non-0 status if activation and/or ping '
-                        "can't be sent to the server")
+    p = argparse.ArgumentParser(
+        description='Send anonymous events for counting Endless users',
+        epilog=(
+            f'eos-phone-home can also be configured {DEFAULT_CONFIG_PATH} or '
+            'the file specified in --config. Any options specified on the '
+            'command line take precedence over the configuration file.'
+        ),
+    )
+    p.add_argument(
+        '-c',
+        '--config',
+        default=DEFAULT_CONFIG_PATH,
+        help='Configuration file to use. Default: %(default)s',
+    )
+    p.add_argument(
+        '--debug',
+        action='store_true',
+        default=None,
+        help='verbose output; disables any actual phoning home',
+    )
+    p.add_argument(
+        '-t',
+        '--host',
+        default=None,
+        help=(
+            'Use specified host as the API server. Default: '
+            f'{PhoneHome.DEFAULT_API_HOST}'
+        ),
+    )
+    p.add_argument(
+        '--force',
+        action='store_true',
+        default=None,
+        help='always collect data (implies --debug)',
+    )
+    p.add_argument(
+        '--exit-on-server-error',
+        action='store_true',
+        default=None,
+        help=(
+            'exit with a non-0 status if activation and/or ping '
+            "can't be sent to the server"
+        ),
+    )
 
     args = p.parse_args()
-    is_debug = args.debug or args.force
+    config = Config.from_path(args.config, vars(args))
+
+    is_debug = config.debug or config.force
     if is_debug:
         log.info("Debugging turned on!")
         level = logging.DEBUG
@@ -463,8 +552,8 @@ def main():
         level = logging.INFO
     logging.basicConfig(level=level)
 
-    app = PhoneHome(is_debug, args.force, api_host=args.host)
-    app.run(args.exit_on_server_error)
+    app = PhoneHome(is_debug, config.force, api_host=config.host)
+    app.run(config.exit_on_server_error)
 
 
 if __name__ == '__main__':
