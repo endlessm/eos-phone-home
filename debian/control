@@ -3,7 +3,8 @@ Section: admin
 Priority: extra
 Maintainer: Robert McQueen <rob@endlessm.com>
 Build-Depends: attr,
-               debhelper (>= 7),
+               debhelper (>= 10),
+               meson,
                python3-pytest,
                python3-requests,
 Standards-Version: 3.9.4
