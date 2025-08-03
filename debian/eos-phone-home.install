@@ -1,6 +1,0 @@
-50-eos-phone-home       /etc/NetworkManager/dispatcher.d
-eos-phone-home          /usr/lib/eos-phone-home
-eos-phone-home.conf     /usr/lib/tmpfiles.d
-eos-phone-home.path     /usr/lib/systemd/system
-eos-phone-home.service  /usr/lib/systemd/system
-eos-phone-home.timer    /usr/lib/systemd/system
